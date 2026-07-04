@@ -106,10 +106,13 @@ body{
 .layout{
   flex:1;
   display:grid;
-  grid-template-columns: minmax(320px, 460px) 1fr;
+  /* Stage column widened alongside the circle's own growth (see the SVG
+     VIEW constant) — three nested tuplet rings need real room, and a
+     460px cap was already tight for the plain circle alone. */
+  grid-template-columns: minmax(320px, 640px) 1fr;
   gap:0;
 }
-@media (max-width: 880px){
+@media (max-width: 1040px){
   .layout{ grid-template-columns: 1fr; }
 }
 
@@ -123,13 +126,13 @@ body{
   border-right: 1px solid var(--border);
   position:relative;
 }
-@media (max-width: 880px){
+@media (max-width: 1040px){
   .stage{ border-right:none; border-bottom:1px solid var(--border); }
 }
 
 .stage-meta{
   width:100%;
-  max-width: 420px;
+  max-width: 600px;
   display:flex;
   justify-content:space-between;
   align-items:flex-start;
@@ -158,7 +161,11 @@ body{
 .circle-wrap{
   position:relative;
   width: 100%;
-  max-width: 420px;
+  /* Matches the SVG viewBox (600) 1:1 so the base dot ring renders at the
+     same on-screen size as before — the extra space this box now reserves
+     is exactly the room the wider viewBox opened up for tuplet rings,
+     not a shrink of the circle itself. */
+  max-width: 600px;
   aspect-ratio: 1/1;
   margin: 30px 0 20px;
 }
@@ -166,6 +173,16 @@ body{
   width:100%;
   height:100%;
   overflow: visible;
+}
+/* The playhead radius line eases toward each new angle/length rather than
+   snapping instantly — since its length now changes with ring depth (base
+   ring vs. a tuplet ring, however deeply nested), this keeps it reading as
+   a single hand sweeping and extending/retracting around the circle,
+   instead of a line that teleports and re-lengthens abruptly at every
+   onset. The duration is kept short so it still settles well before the
+   next fast subdivision fires. */
+#playheadLine{
+  transition: x2 0.09s linear, y2 0.09s linear, opacity 0.12s ease;
 }
 
 .center-readout{
@@ -254,7 +271,7 @@ body{
 }
 .tuplet-hint{
   width:100%;
-  max-width:420px;
+  max-width:600px;
   text-align:center;
   font-family: var(--mono);
   font-size:11px;
@@ -279,6 +296,13 @@ body{
 .tuplet-arc{ fill:none; stroke: var(--orange); stroke-width:2; stroke-linecap:round; }
 .tuplet-arc:hover, .tuplet-arc.hover{ stroke-width:3; }
 .tuplet-onset-dot{ pointer-events:none; }
+.step-hitzone{ fill:transparent; stroke:transparent; stroke-width:1.5; cursor:pointer; transition: stroke 0.1s ease; }
+/* Same treatment as .tuplet-hitzone below: hovering a base step in
+   add-tuplet mode highlights that step dot's circumference, via a stroke
+   ring on the (otherwise invisible) hitzone centered on it, rather than
+   resizing or recoloring the dot itself. Skipped while armed since the
+   orange fill already reads as selected. */
+.step-hitzone:hover:not(.armed){ stroke: var(--text); }
 .tuplet-label{
   font-family: var(--mono);
   font-weight:700;
@@ -294,7 +318,14 @@ body{
 }
 .tuplet-label.nested{ fill:#ffb877; font-size:11px; }
 .tuplet-label:hover, .tuplet-label.hover{ fill:#fff; }
-.tuplet-hitzone{ fill:transparent; stroke:transparent; cursor:pointer; }
+.tuplet-hitzone{ fill:transparent; stroke:transparent; stroke-width:1.5; cursor:pointer; transition: stroke 0.1s ease; }
+/* Hovering a placement hitzone in add-tuplet mode highlights the dot's
+   circumference — the hitzone is centered exactly on its .tuplet-onset-dot,
+   so drawing a stroke ring on the (otherwise invisible) hitzone itself reads
+   as that dot lighting up, without needing to reach into the dot underneath.
+   Skipped while a slot is armed (the orange fill already reads as selected,
+   a stroke ring on top would just look busy). */
+.tuplet-hitzone:hover:not(.armed){ stroke: var(--text); }
 
 /* Popover for choosing/editing a tuplet's division */
 .tuplet-popover{
@@ -473,6 +504,72 @@ select{
   width:16px; height:16px;
   accent-color: var(--orange);
 }
+
+/* ---------- Swing slider (shared by the global control and the tuplet popover) ---------- */
+.swing-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.swing-row label{
+  font-family: var(--mono);
+  color: var(--text-secondary);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  white-space:nowrap;
+}
+.swing-row .swing-val{
+  font-family: var(--mono);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align:right;
+}
+input[type=range].swing-slider{
+  -webkit-appearance:none;
+  appearance:none;
+  flex:1;
+  height:4px;
+  background: var(--border-strong);
+  border-radius:2px;
+  outline:none;
+  cursor:pointer;
+}
+input[type=range].swing-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  appearance:none;
+  width:14px; height:14px;
+  border-radius:50%;
+  background: var(--orange);
+  border: 2px solid var(--bg-raised);
+  cursor:pointer;
+  transition: transform 0.08s ease;
+}
+input[type=range].swing-slider::-webkit-slider-thumb:hover{ transform: scale(1.12); }
+input[type=range].swing-slider::-moz-range-thumb{
+  width:14px; height:14px;
+  border-radius:50%;
+  background: var(--orange);
+  border: 2px solid var(--bg-raised);
+  cursor:pointer;
+}
+input[type=range].swing-slider::-moz-range-track{
+  height:4px;
+  background: var(--border-strong);
+  border-radius:2px;
+}
+input[type=range].swing-slider:focus{
+  outline:none;
+}
+input[type=range].swing-slider:focus::-webkit-slider-thumb{
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.gc-field .swing-row{ width:150px; }
+.gc-field .swing-row label{ font-size:11px; }
+.gc-field .swing-row .swing-val{ font-size:11px; width:30px; }
+
+.tuplet-popover .swing-row .swing-val{ font-size:11px; width:28px; }
 .checkbox-row label{
   font-family: var(--mono);
   font-size: 12px;
@@ -606,6 +703,13 @@ select{
       <label for="freqInput" data-tooltip="Click frequency in Hertz">Hz</label>
       <input type="number" id="freqInput" value="440" min="20" max="4000">
     </div>
+    <div class="gc-field">
+      <div class="swing-row">
+        <label for="swingSlider" data-tooltip="Delays every other step to give the base grid a shuffled, swung feel. 0 = straight, 100 = maximum swing">Swing</label>
+        <input type="range" id="swingSlider" class="swing-slider" min="0" max="100" step="1" value="0">
+        <span class="swing-val" id="swingVal">0</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -657,6 +761,14 @@ select{
       <input type="number" id="tupletDivisionInput" min="2" max="32" value="3">
     </div>
     <div class="tp-row" id="tupletRatioReadout" style="font-size:11px; color:var(--text-dim);"></div>
+
+    <div class="tp-row" id="tupletSwingRow">
+      <div class="swing-row" style="flex:1;">
+        <label for="tupletSwingSlider" style="font-size:11px;" data-tooltip="Delays every other onset within this tuplet. 0 = straight, 100 = maximum swing">Swing</label>
+        <input type="range" id="tupletSwingSlider" class="swing-slider" min="0" max="100" step="1" value="0">
+        <span class="swing-val" id="tupletSwingVal">0</span>
+      </div>
+    </div>
 
     <div class="tp-row" id="tupletOverrideRow" style="display:none;">
       <label for="tupletOverrideToggle" style="flex:1; font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;" data-tooltip="When on, the base circle's own onsets inside this span are silenced — only this tuplet's rhythm plays here">Override base onsets</label>
@@ -922,6 +1034,26 @@ function modulo(a, b) {
   let out = ((a % b) + b) % b;
   if (out < 0) out += b;
   return out;
+}
+
+// Classic MPC-style swing: every other event in a sorted list of positions
+// (index 1, 3, 5... in *onset order*, not raw grid-slot index) is delayed
+// toward the following event by `swing`% of the gap between them. The last
+// event in the cycle delays toward the first event's position one cycle
+// later (cycleLen), so swing still applies smoothly across the wrap.
+//
+// `positions` must already be sorted ascending and within [0, cycleLen).
+// `swing` is 0-100; 0 returns the input unchanged, 100 pushes an odd event
+// almost onto the following one (kept just short of a full collision).
+function applySwingToFractions(positions, cycleLen, swing) {
+  if (!swing || positions.length < 2) return positions.slice();
+  const amount = Math.max(0, Math.min(100, swing)) / 100 * 0.5; // cap at half the gap
+  return positions.map((pos, i) => {
+    if (i % 2 === 0) return pos; // even-indexed (the "on" beats) stay put
+    const next = i + 1 < positions.length ? positions[i + 1] : positions[0] + cycleLen;
+    const gap = next - pos;
+    return pos + gap * amount;
+  });
 }
 
 function getEuclidIntervals(n, k) {
@@ -1326,6 +1458,27 @@ class Tuplet {
     return out;
   }
 
+  // Same as onsetFractions(), but each entry also carries the nesting
+  // depth it was actually produced at (0 = this node's own slots, 1 = a
+  // direct child's slots, etc.) — used so playback can point the radius
+  // line at the specific ring an onset lives on, the same ring drawTuplets
+  // already draws it on, rather than always the outermost or innermost one.
+  onsetFractionsWithDepth(depth) {
+    depth = depth || 0;
+    const out = [];
+    for (let i = 0; i < this.division; i++) {
+      const slotStart = i / this.division;
+      const slotWidth = 1 / this.division;
+      const child = this.children[i];
+      if (child) {
+        child.onsetFractionsWithDepth(depth + 1).forEach(e => out.push({ frac: slotStart + e.frac * slotWidth, depth: e.depth }));
+      } else if (this.pattern[i]) {
+        out.push({ frac: slotStart, depth });
+      }
+    }
+    return out;
+  }
+
   // Convenience: fractional [start,end) of every leaf slot (for drawing
   // tick marks / nested arcs), tagged with depth and onset state.
   leafSlots(depth) {
@@ -1347,6 +1500,18 @@ class Tuplet {
       }
     }
     return out;
+  }
+
+  // How many additional ring levels this node's own subtree needs beyond
+  // itself (0 = no nested children anywhere below this node). Used to size
+  // the visible ring stack — a plain tuplet with no nested children only
+  // ever needs its own ring, but three levels of nesting need three.
+  maxChildDepth() {
+    let max = 0;
+    for (const child of this.children) {
+      if (child) max = Math.max(max, 1 + child.maxChildDepth());
+    }
+    return max;
   }
 
   // Deep clone (including nested children), used to snapshot a tuplet
@@ -1385,6 +1550,11 @@ class TupletSpan {
     // thing heard/drawn across its span instead of the two layers
     // overlapping. On by default for a freshly-created tuplet.
     this.overrideBase = true;
+    // 0-100. Delays every other onset *within this span's own onset list*
+    // (index 1, 3, 5... in onset order, not raw slot index — so it still
+    // reads as "swing" even when this node's own pattern skips slots) by
+    // a fraction of the gap to the following onset. 0 = perfectly straight.
+    this.swing = 0;
   }
 
   lengthInSteps(n) {
@@ -1398,10 +1568,28 @@ class TupletSpan {
 
   // This span's onset fractions, mapped into absolute step-position space
   // (still fractional — e.g. step 3.33), so they sit alongside the base
-  // pattern's integer step positions on the same timeline.
+  // pattern's integer step positions on the same timeline. Swing (if set)
+  // is applied here, in onset-order, so it works uniformly regardless of
+  // what generator produced the underlying pattern.
   onsetStepPositions(n) {
     const len = this.lengthInSteps(n);
-    return this.root.onsetFractions().map(f => modulo(this.startStep + f * len, n));
+    const fracs = applySwingToFractions(this.root.onsetFractions(), 1, this.swing);
+    return fracs.map(f => modulo(this.startStep + f * len, n));
+  }
+
+  // Same as onsetStepPositions(), but each entry also carries the ring
+  // depth (0 = this span's own root ring, 1 = a nested child's ring, ...)
+  // that onset visually lives on, so playback can point the radius line
+  // at the same ring drawTuplets() draws that onset's dot on.
+  onsetStepPositionsWithDepth(n) {
+    const len = this.lengthInSteps(n);
+    const tagged = this.root.onsetFractionsWithDepth(0);
+    const rawFracs = tagged.map(e => e.frac);
+    const swungFracs = applySwingToFractions(rawFracs, 1, this.swing);
+    return tagged.map((e, i) => ({
+      pos: modulo(this.startStep + swungFracs[i] * len, n),
+      depth: e.depth,
+    }));
   }
 
   // Deep clone, used to snapshot a span before a live edit begins (see
@@ -1411,6 +1599,7 @@ class TupletSpan {
     copy.id = this.id;
     copy.root = this.root.clone();
     copy.overrideBase = this.overrideBase;
+    copy.swing = this.swing;
     return copy;
   }
 }
@@ -1466,6 +1655,18 @@ const state = {
   // redraws the playhead where it actually is instead of snapping it
   // back to step 0 until the next scheduled tick corrects it.
   lastPlayheadFrac: 0,
+
+  // Ring depth the playhead line's outer end was last drawn at (null =
+  // base dot ring, a number = that tuplet nesting depth's ring), tracked
+  // alongside lastPlayheadFrac for the same mid-playback-rebuild reason —
+  // so the line's *length*, not just its angle, survives a drawCircle()
+  // called between scheduled ticks.
+  lastPlayheadRingDepth: null,
+
+  // 0-100. Global swing applied to the base step grid (every generator
+  // tab draws from this same grid) — delays every odd-indexed base step
+  // toward the following one. Read live by the schedulers, same as bpm.
+  swing: 0,
 };
 
 function getEl(id) { return document.getElementById(id); }
@@ -1704,7 +1905,7 @@ function refreshCurrentAlgo() {
 
   drawCircle();
   if (state.playing) {
-    if (hasTuplets()) scheduleIfPlaying();
+    if (needsFractionalScheduler()) scheduleIfPlaying();
     else fireStep(state.currentStep);
   }
 }
@@ -1714,7 +1915,13 @@ function refreshCurrentAlgo() {
    ========================================================================= */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const VIEW = 420;
+// VIEW was 420 with rings starting at R_DOTS+52 and stepping by 20 — that
+// only left clean room for a single tuplet ring before its label crowded
+// the edge of the .circle-wrap box. Widened so at least three nested
+// tuplet levels (a triplet inside a triplet inside a triplet) each get
+// their own clearly-separated ring and label without the outermost one
+// running into the transport/legend rows below.
+const VIEW = 600;
 const CENTER = VIEW / 2;
 const R_DOTS = 168;
 const DOT_R_REST = 5;
@@ -1723,8 +1930,15 @@ const DOT_R_ONSET = 8;
 // The SVG has overflow:visible and the stage now carries extra top
 // margin (see .circle-wrap CSS) specifically so this can sit clear of
 // the step-dot ring instead of crowding it.
-const R_TUPLET_BASE = R_DOTS + 52;
-const R_TUPLET_STEP = 20;
+const R_TUPLET_BASE = R_DOTS + 44;
+const R_TUPLET_STEP = 18;
+// Levels of nesting the layout is designed to comfortably reserve visual
+// space for — depth 0, 1, 2 = three rings, each with its own clearly
+// separated arc and label within the circle-wrap box before the edge is
+// reached. Deeper nesting still draws correctly, it just gets
+// progressively cozier past this point rather than clipping or
+// overlapping anything.
+const TUPLET_RINGS_RESERVED = 3;
 
 function polarToXY(index, total, radius) {
   const angle = (index / total) * Math.PI * 2 - Math.PI / 2; // start at 12 o'clock
@@ -1834,12 +2048,17 @@ function drawCircle() {
   // fired at (state.lastPlayheadFrac), not always step 0, so rebuilding
   // the SVG mid-playback (e.g. a live tuplet-parameter edit calling
   // drawCircle) doesn't visually snap the playhead back to the start
-  // until the next scheduled tick corrects it.
+  // until the next scheduled tick corrects it. Its outer radius is
+  // restored the same way, from state.lastPlayheadRingDepth, so a
+  // rebuild while the line is sitting out on a tuplet ring doesn't snap
+  // its *length* back to the base ring either.
   const playLine = document.createElementNS(SVG_NS, 'line');
   playLine.setAttribute('id', 'playheadLine');
   playLine.setAttribute('x1', CENTER); playLine.setAttribute('y1', CENTER);
   const restoredFrac = state.playing ? modulo(state.lastPlayheadFrac, n) : 0;
-  const initial = fracToXY(restoredFrac / n, R_DOTS);
+  const restoredDepth = state.playing ? state.lastPlayheadRingDepth : null;
+  const restoredRadius = restoredDepth == null ? R_DOTS : R_TUPLET_BASE + restoredDepth * R_TUPLET_STEP;
+  const initial = fracToXY(restoredFrac / n, restoredRadius);
   playLine.setAttribute('x2', initial.x); playLine.setAttribute('y2', initial.y);
   playLine.setAttribute('stroke', 'var(--orange)');
   playLine.setAttribute('stroke-width', '1.5');
@@ -1885,12 +2104,25 @@ function drawCircle() {
     g.appendChild(text);
 
     if (state.tupletMode) {
-      g.classList.toggle('armed', state.tupletArm && state.tupletArm.kind === 'base' && state.tupletArm.step === i);
+      const armed = state.tupletArm && state.tupletArm.kind === 'base' && state.tupletArm.step === i;
+      g.classList.toggle('armed', armed);
       g.style.cursor = 'pointer';
-      g.addEventListener('click', (e) => {
+
+      // Invisible, generously-sized click target layered over the dot
+      // (mirrors .tuplet-hitzone on the tuplet-arc dots) — the visible
+      // dot itself is only 5-12px, which is fiddly to land a click on
+      // precisely, and its hover ring gives clear feedback for exactly
+      // where a click will register.
+      const hit = document.createElementNS(SVG_NS, 'circle');
+      hit.setAttribute('cx', p.x);
+      hit.setAttribute('cy', p.y);
+      hit.setAttribute('r', (isOn ? restingOnsetRadius(i) : DOT_R_REST) + 6);
+      hit.setAttribute('class', 'step-hitzone' + (armed ? ' armed' : ''));
+      hit.addEventListener('click', (e) => {
         e.stopPropagation();
         onBaseStepClick(i);
       });
+      g.appendChild(hit);
     }
 
     svg.appendChild(g);
@@ -1998,8 +2230,12 @@ function drawTupletNode(svg, node, fracStart, fracEnd, depth, addr) {
     if (!isBoundarySlot && !hasNestedChild) {
       const onsets = node.pattern[i] > 0;
       const dotPos = fracToXY(slotFrac, radius);
-      const restR = depth > 0 ? 2.5 : 3;
-      const onsetR = depth > 0 ? 3.5 : 4.5;
+      // Sized up from the original 2.5/3 and 3.5/4.5 so they're easier to
+      // land a click on, while staying visibly smaller than the main
+      // circle's step dots (DOT_R_REST 5 / DOT_R_ONSET 8) so the base ring
+      // still reads as the primary, larger scale.
+      const restR = depth > 0 ? 3.5 : 4;
+      const onsetR = depth > 0 ? 5 : 6;
       const onFill = depth > 0 ? '#7ba7e8' : 'var(--blue)';
       const restFill = 'var(--border-strong)';
       const onsetDot = document.createElementNS(SVG_NS, 'circle');
@@ -2031,11 +2267,15 @@ function drawTupletNode(svg, node, fracStart, fracEnd, depth, addr) {
       const hit = document.createElementNS(SVG_NS, 'circle');
       hit.setAttribute('cx', hitPos.x);
       hit.setAttribute('cy', hitPos.y);
-      hit.setAttribute('r', 7);
-      hit.setAttribute('class', 'tuplet-hitzone');
+      // A little larger than the biggest dot that could sit here (the
+      // onset radius at this depth), so the hover ring sits just outside
+      // the dot's own edge instead of cutting across it.
+      const hitR = (depth > 0 ? 5 : 6) + 2.5;
+      hit.setAttribute('r', hitR);
       const armed = state.tupletArm && state.tupletArm.kind === 'node'
         && state.tupletArm.spanId === addr.spanId
         && arraysEqual(state.tupletArm.path, addr.path) && state.tupletArm.slot === i;
+      hit.setAttribute('class', 'tuplet-hitzone' + (armed ? ' armed' : ''));
       hit.setAttribute('fill', armed ? 'var(--orange)' : 'transparent');
       hit.setAttribute('opacity', armed ? '0.9' : '1');
       hit.addEventListener('click', (e) => {
@@ -2496,14 +2736,20 @@ function openTupletEditor(existingAddr, anchorXY, impliedSpan, isNested) {
     // The override toggle silences base-grid onsets across the *whole
     // span* — that only makes sense at the root level; a nested tuplet
     // already lives entirely inside its parent's span, with no base-grid
-    // onsets of its own to override.
+    // onsets of its own to override. Swing is likewise a root-level-only
+    // property of the span's own onset timeline.
     const overrideRow = getEl('tupletOverrideRow');
     if (existingAddr.path.length === 0) {
       overrideRow.style.display = 'flex';
       getEl('tupletOverrideToggle').checked = span.overrideBase;
+      getEl('tupletSwingRow').style.display = 'flex';
+      getEl('tupletSwingSlider').value = span.swing || 0;
     } else {
       overrideRow.style.display = 'none';
+      getEl('tupletSwingRow').style.display = 'none';
+      getEl('tupletSwingSlider').value = 0;
     }
+    getEl('tupletSwingVal').textContent = getEl('tupletSwingSlider').value;
     renderTupletParamFields(node.genConfig);
     pop.classList.add('visible');
     const pos = anchorXY || polarToXY(span.startStep, state.n, R_TUPLET_BASE);
@@ -2523,6 +2769,9 @@ function openTupletEditor(existingAddr, anchorXY, impliedSpan, isNested) {
     ratio.textContent = 'Subdivides one slot of the parent tuplet';
     algoSelect.value = 'fill';
     getEl('tupletOverrideRow').style.display = 'none';
+    getEl('tupletSwingRow').style.display = 'none';
+    getEl('tupletSwingSlider').value = 0;
+    getEl('tupletSwingVal').textContent = '0';
     renderTupletParamFields(null);
     pop.classList.add('visible');
     const span = spanById(state.pendingNested.spanId);
@@ -2541,6 +2790,9 @@ function openTupletEditor(existingAddr, anchorXY, impliedSpan, isNested) {
     algoSelect.value = 'fill';
     getEl('tupletOverrideRow').style.display = 'flex';
     getEl('tupletOverrideToggle').checked = true;
+    getEl('tupletSwingRow').style.display = 'flex';
+    getEl('tupletSwingSlider').value = 0;
+    getEl('tupletSwingVal').textContent = '0';
     renderTupletParamFields(null);
     pop.classList.add('visible');
     positionPopover(anchorXY);
@@ -2822,6 +3074,7 @@ function applyTupletEditorLive() {
       for (let i = 0; i < Math.min(kept.length, division); i++) span.root.children[i] = kept[i];
     }
     span.overrideBase = getEl('tupletOverrideToggle').checked;
+    span.swing = intOr(getEl('tupletSwingSlider').value, 0);
   } else if (tupletEditorTarget.mode === 'create-nested') {
     const span = spanById(tupletEditorTarget.spanId);
     const parent = resolveNodeAtPath(span, tupletEditorTarget.parentPath);
@@ -2846,6 +3099,7 @@ function applyTupletEditorLive() {
         // preserve nested children where the slot index is still in range
         for (let i = 0; i < Math.min(kept.length, division); i++) span.root.children[i] = kept[i];
         span.overrideBase = getEl('tupletOverrideToggle').checked;
+        span.swing = intOr(getEl('tupletSwingSlider').value, 0);
       } else {
         const parentRef = resolveParent(span, tupletEditorTarget.path);
         if (parentRef) {
@@ -2924,6 +3178,9 @@ function deleteTupletEditor() {
 function fireStep(index) {
   const n = state.n;
   state.lastPlayheadFrac = index;
+  // This path only ever runs when there are no tuplets (see
+  // needsFractionalScheduler()), so the line always targets the base ring.
+  state.lastPlayheadRingDepth = null;
   // Move playhead line
   const line = getEl('playheadLine') || document.getElementById('playheadLine');
   if (line) {
@@ -2982,9 +3239,13 @@ function cycleDurationSec() {
 }
 
 // Builds the flat, time-ordered list of events for one full cycle when
-// tuplets are in play. Each event: { frac, isOnset } where frac is the
-// position in [0, n) measured in base-step units (so 3.5 = halfway
-// through step 3), matching the same units drawCircle already uses.
+// tuplets or swing are in play. Each event: { frac, isOnset, baseStep }
+// where frac is the position in [0, n) measured in base-step units (so
+// 3.5 = halfway through step 3), matching the same units drawCircle
+// already uses. baseStep is the base-grid step index this event belongs
+// to (so the visualizer can light the correct fixed dot even when swing
+// has moved the event's *time* away from that step's integer position),
+// or null for a tuplet-only onset with no corresponding base step.
 //
 // Tuplets coexist with the underlying pattern rather than replacing it:
 // a base step's own onset still plays at its original instant even when
@@ -2997,25 +3258,48 @@ function buildTupletTimeline() {
   const n = state.n;
   const events = [];
   const seenFracs = new Set();
-  const addEvent = (frac) => {
+  // ringDepth tells the playhead which ring this event visually belongs
+  // on: null means "the base step ring" (R_DOTS), a number means "this
+  // tuplet ring depth" (R_TUPLET_BASE + ringDepth * R_TUPLET_STEP) — the
+  // exact same radius drawTupletNode() used to draw that onset's own dot.
+  const addEvent = (frac, baseStep, ringDepth) => {
     // Snap to a stable key so float noise (e.g. 3.0000000002) doesn't
     // defeat the same-instant dedupe.
     const key = Math.round(frac * 1e6) / 1e6;
     if (seenFracs.has(key)) return;
     seenFracs.add(key);
-    events.push({ frac, isOnset: true });
+    events.push({ frac, isOnset: true, baseStep: baseStep == null ? null : baseStep, ringDepth: ringDepth == null ? null : ringDepth });
   };
 
   state.tuplets.forEach(span => {
-    span.onsetStepPositions(n).forEach(pos => addEvent(pos));
+    span.onsetStepPositionsWithDepth(n).forEach(({ pos, depth }) => addEvent(pos, null, depth));
   });
 
+  // Base-grid onsets not claimed by a tuplet. Global swing (if set) shifts
+  // these in onset-order, same rule as a tuplet's own internal swing —
+  // every other onset delays toward the following one by swing% of the
+  // gap between them, wrapping across the cycle boundary. Each swung
+  // fraction stays paired with the original step index it came from, so
+  // the visualizer lights that exact dot rather than guessing off the
+  // (now offset) time.
+  const baseOnsetSteps = [];
   for (let i = 0; i < n; i++) {
-    if (state.pattern[i] > 0 && !isStepOverriddenByTuplet(i, n)) addEvent(i);
+    if (state.pattern[i] > 0 && !isStepOverriddenByTuplet(i, n)) baseOnsetSteps.push(i);
   }
+  const swung = applySwingToFractions(baseOnsetSteps, n, state.swing);
+  swung.forEach((pos, idx) => addEvent(pos, baseOnsetSteps[idx], null));
 
   events.sort((a, b) => a.frac - b.frac);
   return events;
+}
+
+// Global swing needs the fractional lookahead scheduler even when there
+// are no tuplets, since a fixed-period setInterval can't express "every
+// other step lands a bit late". Tuplets always need it regardless of
+// swing (off-grid proportional onsets). Zero swing + zero tuplets keeps
+// the original plain setInterval(tick) path untouched.
+function needsFractionalScheduler() {
+  return hasTuplets() || state.swing > 0;
 }
 
 // True if some tuplet span with overrideBase enabled covers this base
@@ -3071,7 +3355,9 @@ function tupletScheduleTick() {
 
     const visDelayMs = Math.max(0, (when - ctx.currentTime) * 1000);
     const frac = ev.frac;
-    const t = setTimeout(() => fireFractionalStep(frac), visDelayMs);
+    const baseStep = ev.baseStep;
+    const ringDepth = ev.ringDepth;
+    const t = setTimeout(() => fireFractionalStep(frac, baseStep, ringDepth), visDelayMs);
     state.timeouts.push(t);
 
     state.timelineIdx++;
@@ -3084,22 +3370,40 @@ function tupletScheduleTick() {
   }
 }
 
-function fireFractionalStep(frac) {
+function fireFractionalStep(frac, baseStep, ringDepth) {
   const n = state.n;
   state.lastPlayheadFrac = modulo(frac, n);
+  state.lastPlayheadRingDepth = ringDepth == null ? null : ringDepth;
   const line = document.getElementById('playheadLine');
-  const cycleFrac = modulo(frac / n, 1);
-  const p = fracToXY(cycleFrac, R_DOTS);
+  // The playhead line points at whichever position should visually read as
+  // "this is what just fired". For a tagged base-grid event (baseStep is
+  // not null — this is a base step onset, possibly swung in time) that's
+  // the dot's own fixed grid position, not the swung time-fraction — swing
+  // only ever moves *when* a step fires, never *where* it lives on the
+  // circle, so the line should snap to the real dot instead of hovering
+  // over empty space between two steps. Tuplet-only events (baseStep is
+  // null) have no fixed grid slot to snap to, so those still use the raw
+  // fractional position as before.
+  const pointFrac = baseStep == null ? modulo(frac / n, 1) : baseStep / n;
+  // The line's outer radius tracks the ring the firing event actually
+  // lives on, like a clock hand whose length changes as it sweeps: a
+  // plain base-grid onset (ringDepth null) reaches the base dot ring, a
+  // tuplet onset reaches its own tuplet ring, and a nested tuplet onset
+  // reaches further out still — the same radius drawTupletNode() drew
+  // that onset's own dot at, so the line visually "arrives" at the dot
+  // that's about to pulse instead of stopping short of it at R_DOTS.
+  const pointRadius = ringDepth == null ? R_DOTS : R_TUPLET_BASE + ringDepth * R_TUPLET_STEP;
+  const p = fracToXY(pointFrac, pointRadius);
   if (line) {
     line.setAttribute('x2', p.x);
     line.setAttribute('y2', p.y);
     line.setAttribute('opacity', '0.9');
   }
-  // Reset base dots, pulse the nearest one so on-grid onsets still read
-  // clearly. Uses the same override-aware effective on/off state as
-  // drawCircle, so a step silenced by an overrideBase tuplet stays
-  // rest-styled through playback instead of flashing back to its raw
-  // pattern value on every tick.
+  // Reset base dots, then pulse whichever one this event actually belongs
+  // to. Uses the same override-aware effective on/off state as drawCircle,
+  // so a step silenced by an overrideBase tuplet stays rest-styled through
+  // playback instead of flashing back to its raw pattern value on every
+  // tick.
   for (let i = 0; i < n; i++) {
     const dot = document.getElementById('dot-' + i);
     if (!dot) continue;
@@ -3107,10 +3411,17 @@ function fireFractionalStep(frac) {
     dot.setAttribute('r', isOn ? restingOnsetRadius(i) : DOT_R_REST);
     dot.setAttribute('fill', isOn ? 'var(--blue)' : 'var(--border-strong)');
   }
-  const nearest = Math.round(frac) % n;
-  if (Math.abs(frac - nearest) < 0.01 && state.pattern[nearest] > 0 && !isStepOverriddenByTuplet(nearest, n)) {
-    const dot = document.getElementById('dot-' + nearest);
-    if (dot) { dot.setAttribute('r', restingOnsetRadius(nearest) + 5); dot.setAttribute('fill', 'var(--orange)'); }
+  // baseStep is the authoritative answer to "which dot does this event
+  // belong to" — set by buildTupletTimeline() from the step the (possibly
+  // swung) onset actually came from, so this lights up correctly even when
+  // swing has moved the firing time well away from that step's integer
+  // position. Previously this snapped to Math.round(frac), which is only
+  // ever right when there's no swing (or no tuplets) to move frac away
+  // from an integer in the first place — under swing it silently missed
+  // every delayed onset.
+  if (baseStep != null && state.pattern[baseStep] > 0 && !isStepOverriddenByTuplet(baseStep, n)) {
+    const dot = document.getElementById('dot-' + baseStep);
+    if (dot) { dot.setAttribute('r', restingOnsetRadius(baseStep) + 5); dot.setAttribute('fill', 'var(--orange)'); }
   }
 
   // Reset every tuplet onset dot to its resting look, then pulse whichever
@@ -3147,7 +3458,7 @@ function fireFractionalStep(frac) {
 
 function scheduleClock() {
   clearTimers();
-  if (hasTuplets()) {
+  if (needsFractionalScheduler()) {
     state.timeline = buildTupletTimeline();
     state.timelineIdx = 0;
     state.nextEventTime = state.audioCtx.currentTime + 0.03;
@@ -3166,7 +3477,7 @@ function scheduleClock() {
 // changes, not the underlying beat.
 function scheduleIfPlaying() {
   if (!state.playing) return;
-  if (hasTuplets()) {
+  if (needsFractionalScheduler()) {
     const cycleSec = cycleDurationSec();
     const stepSec = currentStepDurationSec();
     let elapsedFrac;
@@ -3302,7 +3613,7 @@ function startPlayback() {
   state.playing = true;
   state.currentStep = 0;
   scheduleClock();
-  if (!hasTuplets()) {
+  if (!needsFractionalScheduler()) {
     tick(); // play/visualize step 0 immediately instead of waiting one interval
   }
 
@@ -3314,6 +3625,7 @@ function startPlayback() {
 function stopPlayback() {
   state.playing = false;
   clearTimers();
+  state.lastPlayheadRingDepth = null;
   const line = document.getElementById('playheadLine');
   if (line) line.setAttribute('opacity', '0');
   for (let i = 0; i < state.n; i++) {
@@ -3398,6 +3710,16 @@ getEl('freqInput').addEventListener('input', () => {
   // frequency is read live in tick(), nothing to reschedule
 });
 
+getEl('swingSlider').addEventListener('input', () => {
+  state.swing = intOr(getEl('swingSlider').value, 0);
+  getEl('swingVal').textContent = state.swing;
+  // scheduleIfPlaying (not scheduleClock) rebuilds the timeline in place —
+  // same transition logic used when a tuplet is added mid-playback — so
+  // dragging the slider reshapes upcoming onset timing without snapping
+  // the playhead back to the start of the cycle.
+  scheduleIfPlaying();
+});
+
 getEl('playBtn').addEventListener('click', togglePlayback);
 
 // Tap tempo
@@ -3456,6 +3778,11 @@ getEl('tupletAlgoSelect').addEventListener('change', () => {
 });
 
 getEl('tupletOverrideToggle').addEventListener('change', applyTupletEditorLive);
+
+getEl('tupletSwingSlider').addEventListener('input', () => {
+  getEl('tupletSwingVal').textContent = getEl('tupletSwingSlider').value;
+  applyTupletEditorLive();
+});
 
 // The param fields under #tupletAlgoParams (onsets/multiplier/rotation/
 // mode/grouping/complement/reverse/pseudo) are rebuilt from scratch every
