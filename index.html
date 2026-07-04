@@ -45,7 +45,7 @@ body{
   flex-direction:column;
 }
 
-/* --------- Top bar --------- */
+/* ---------- Top bar ---------- */
 .topbar{
   display:flex;
   align-items:center;
@@ -160,6 +160,7 @@ body{
   width: 100%;
   max-width: 420px;
   aspect-ratio: 1/1;
+  margin: 30px 0 20px;
 }
 .circle-wrap svg{
   width:100%;
@@ -241,6 +242,140 @@ body{
 }
 .legend span{ display:flex; align-items:center; gap:6px; }
 .legend .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+
+/* ---------- Tuplet tools ---------- */
+.tuplet-bar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:16px;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+.tuplet-hint{
+  width:100%;
+  max-width:420px;
+  text-align:center;
+  font-family: var(--mono);
+  font-size:11px;
+  color: var(--text-dim);
+  min-height:14px;
+  margin-top:6px;
+}
+.btn.tuplet-toggle.active{
+  background: var(--orange);
+  border-color: var(--orange);
+  color:#1c1006;
+  font-weight:600;
+}
+.btn.tuplet-toggle.active:hover{ background:#ff9c52; }
+.btn[disabled]{
+  opacity:0.4;
+  cursor:default;
+  pointer-events:none;
+}
+
+.step-dot.armed circle{ fill: var(--orange) !important; }
+.tuplet-arc{ fill:none; stroke: var(--orange); stroke-width:2; stroke-linecap:round; }
+.tuplet-arc:hover, .tuplet-arc.hover{ stroke-width:3; }
+.tuplet-onset-dot{ pointer-events:none; }
+.tuplet-label{
+  font-family: var(--mono);
+  font-weight:700;
+  font-size:13px;
+  fill: var(--orange);
+  text-anchor:middle;
+  dominant-baseline:middle;
+  cursor:pointer;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.tuplet-label.nested{ fill:#ffb877; font-size:11px; }
+.tuplet-label:hover, .tuplet-label.hover{ fill:#fff; }
+.tuplet-hitzone{ fill:transparent; stroke:transparent; cursor:pointer; }
+
+/* Popover for choosing/editing a tuplet's division */
+.tuplet-popover{
+  position:fixed;
+  z-index:1100;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  font-family: var(--mono);
+  display:none;
+  flex-direction:column;
+  gap:10px;
+  width: 250px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.tuplet-popover.visible{ display:flex; }
+.tuplet-popover .tp-title{
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  color: var(--text-secondary);
+}
+.tuplet-popover .tp-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.tp-preview-wrap{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px;
+}
+.tp-preview-wrap svg{
+  width: 148px;
+  height: 148px;
+  display:block;
+}
+.tuplet-popover input[type=number]{ width:70px; }
+.tuplet-popover select{ font-family:var(--mono); font-size:11px; }
+.tuplet-popover .tp-actions{
+  display:flex;
+  gap:8px;
+  margin-top:2px;
+}
+.tuplet-popover .btn{ padding:7px 12px; font-size:11px; flex:1; }
+.tp-param-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:8px;
+  margin-top:2px;
+}
+.tp-param-grid .field{ margin:0; }
+.tp-param-grid label{
+  font-size:10px;
+  color: var(--text-dim);
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  display:block;
+  margin-bottom:3px;
+}
+.tp-param-grid input{ width:100%; }
+.tp-checkbox-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  color: var(--text-secondary);
+  margin-top:6px;
+}
+.tp-checkbox-row input{ margin:0; }
+.tp-stage-list{ margin-top:6px; max-height:140px; overflow-y:auto; }
+.tp-stage-list .stage-row{ padding:5px 8px; gap:6px; }
+.tp-stage-list .stage-idx{ font-size:10px; width:44px; }
+.tp-stage-list .stage-bars{ height:14px; }
 
 /* ---------- Panel (controls) ---------- */
 .panel{
@@ -496,12 +631,65 @@ select{
       <button class="btn ghost" id="tapBtn" data-tooltip="Tap in time, a few taps in a row, to set the BPM">Tap tempo</button>
     </div>
 
+    <div class="tuplet-bar">
+      <button class="btn tuplet-toggle" id="tupletModeBtn" data-tooltip="Click two points on the circle to turn the steps between them into a tuplet">Add tuplet</button>
+      <button class="btn ghost" id="tupletClearBtn" data-tooltip="Remove all tuplets and return to the plain step grid">Clear tuplets</button>
+    </div>
+    <div class="tuplet-hint" id="tupletHint"></div>
+
     <div class="legend">
       <span data-tooltip="Step plays a sound"><span class="dot" style="background:var(--blue)"></span>onset</span>
       <span data-tooltip="Step is silent"><span class="dot" style="background:var(--border-strong)"></span>rest</span>
       <span data-tooltip="Step currently playing"><span class="dot" style="background:var(--orange)"></span>playing</span>
+      <span data-tooltip="A subdivided tuplet span — click its arc or ratio label to edit its generator or division, or remove it"><span class="dot" style="background:var(--orange); width:8px; height:2px; border-radius:0;"></span>tuplet</span>
     </div>
   </div>
+
+  <div class="tuplet-popover" id="tupletPopover">
+    <div class="tp-title" id="tupletPopoverTitle">New tuplet</div>
+
+    <div class="tp-preview-wrap" id="tupletPreviewWrap">
+      <svg id="tupletPreviewSvg" viewBox="0 0 160 160"></svg>
+    </div>
+
+    <div class="tp-row">
+      <label for="tupletDivisionInput" style="flex:1; font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Divide into</label>
+      <input type="number" id="tupletDivisionInput" min="2" max="32" value="3">
+    </div>
+    <div class="tp-row" id="tupletRatioReadout" style="font-size:11px; color:var(--text-dim);"></div>
+
+    <div class="tp-row" id="tupletOverrideRow" style="display:none;">
+      <label for="tupletOverrideToggle" style="flex:1; font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;" data-tooltip="When on, the base circle's own onsets inside this span are silenced — only this tuplet's rhythm plays here">Override base onsets</label>
+      <input type="checkbox" id="tupletOverrideToggle" checked>
+    </div>
+
+    <div class="tp-row" style="border-top:1px solid var(--border); margin-top:2px; padding-top:10px;">
+      <label for="tupletAlgoSelect" style="flex:1; font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em;">Pattern</label>
+      <select id="tupletAlgoSelect" style="flex:1;">
+        <option value="fill" selected>All onsets</option>
+        <option value="euclid">Euclidean</option>
+        <option value="clough">Clough–Douthett</option>
+        <option value="deep">Deep Rhythm</option>
+        <option value="tihai">Tihai</option>
+        <option value="grid">Grid</option>
+      </select>
+    </div>
+    <div id="tupletAlgoParams"></div>
+    <div class="error-msg" id="tupletAlgoError" style="font-size:10px;"></div>
+    <div id="tupletStageListWrap" style="display:none;">
+      <div class="tp-row" style="font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em;" data-tooltip="Click a stage to preview and use it for this tuplet">Nested stages</div>
+      <div class="stage-list tp-stage-list" id="tupletStageList"></div>
+    </div>
+
+    <div class="tp-actions">
+      <button class="btn ghost" id="tupletCancelBtn" style="border:1px solid var(--border-strong);">Cancel</button>
+      <button class="btn primary" id="tupletConfirmBtn">Done</button>
+    </div>
+    <div class="tp-actions" id="tupletDeleteRow" style="display:none;">
+      <button class="btn ghost" id="tupletDeleteBtn" style="border:1px solid var(--red); color:var(--red); width:100%;">Remove this tuplet</button>
+    </div>
+  </div>
+
 
   <!-- ============ CONTROL PANEL ============ -->
   <div class="panel">
@@ -1000,6 +1188,246 @@ function grid(n, k, m, group, left, p, type, pseudo, mode, rotation, complement,
   return out;
 }
 
+/* ---- Pure pattern generation, parameterized (no DOM reads) ----
+   Same five algorithms as the main panel, but driven by a plain params
+   object instead of specific input elements — used wherever a pattern is
+   needed for something other than the top-level circle, e.g. each
+   tuplet's own onset pattern. Returns { pattern, error }; pattern is a
+   binary array of length n on success, null on failure (with error set). */
+function generatePatternPure(algo, n, params) {
+  params = params || {};
+  const mode = params.mode | 0;
+  const rotation = params.rotation | 0;
+  const complement = !!params.complement;
+  const reverse = !!params.reverse;
+  try {
+    let pattern;
+    if (algo === 'euclid') {
+      const k = Math.max(1, params.k | 0);
+      if (k > n) return { pattern: null, error: 'k must be ≤ n' };
+      let pos = intervalsToPositions(getEuclidIntervals(n, k), 0);
+      if (mode) pos = modePos(pos, mode, n);
+      if (rotation) pos = rotatePositions(pos, rotation, n);
+      pattern = positionsToBinary(pos, n);
+    } else if (algo === 'clough') {
+      const k = Math.max(1, params.k | 0);
+      if (k > n) return { pattern: null, error: 'k must be ≤ n' };
+      let pos = cloughDouthett(n, k);
+      if (mode) pos = modePos(pos, mode, n);
+      if (rotation) pos = rotatePositions(pos, rotation, n);
+      pattern = positionsToBinary(pos, n);
+    } else if (algo === 'deep') {
+      const k = Math.max(1, params.k | 0);
+      const m = Math.max(1, params.m | 0);
+      if (k > n) return { pattern: null, error: 'k must be ≤ n' };
+      let pos = deepRhythm(n, k, m);
+      if (mode) pos = modePos(pos, mode, n);
+      if (rotation) pos = rotatePositions(pos, rotation, n);
+      pattern = positionsToBinary(pos, n);
+    } else if (algo === 'tihai') {
+      const m = Math.max(1, params.m | 0);
+      pattern = tihai(n, m, !!params.pseudo);
+      if (!pattern) return { pattern: null, error: 'No tihai exists for these parameters' };
+      if (rotation) pattern = rotateBinaryPattern(pattern, rotation);
+    } else if (algo === 'grid') {
+      const k = Math.max(1, params.k | 0);
+      const m = Math.max(1, params.m | 0);
+      const groupData = (params.group || '2,3').split(',').map(s => parseInt(s.trim(), 10)).filter(x => !isNaN(x));
+      if (groupData.length === 0) return { pattern: null, error: 'Grouping vector cannot be empty' };
+      if ((params.gridAlgo === 'euclid' || params.gridAlgo === 'clough' || params.gridAlgo === 'deep') && k > n) {
+        return { pattern: null, error: 'k must be ≤ n' };
+      }
+      const group = new IntervalVector(groupData, n, 0);
+      const stages = grid(n, k, m, group, !!params.left, floatOr(params.irregularity, 0), params.gridAlgo || 'euclid', !!params.pseudo, mode, rotation, complement, reverse);
+      const stage = stages[Math.min(params.stage | 0, stages.length - 1)];
+      pattern = stage.map(v => v > 0 ? 1 : 0);
+      // grid already applies mode/rotation/complement/reverse internally, return early
+      return { pattern, error: null };
+    } else {
+      return { pattern: new Array(n).fill(1), error: null };
+    }
+    if (complement) pattern = invertBinaryPattern(pattern);
+    if (reverse) pattern = reverseBinaryPattern(pattern);
+    return { pattern, error: null };
+  } catch (e) {
+    return { pattern: null, error: e.message };
+  }
+}
+
+const TUPLET_ALGO_LABELS = {
+  euclid: 'Euclidean',
+  clough: 'Clough–Douthett',
+  deep: 'Deep Rhythm',
+  tihai: 'Tihai',
+  grid: 'Grid',
+};
+
+/* =========================================================================
+   Tuplets — nested proportional subdivisions over a span of base steps
+
+   Modeled after the Nestup Container/Onset approach: a span of time is
+   divided into `division` equal slots. Any one slot can itself hold a
+   child Tuplet that further subdivides that slot's fraction of the span.
+   Onsets are only ever needed as flat fractional positions within [0,1)
+   of the *root* span, which is what onsetFractions() below produces —
+   the tree itself never needs to be flattened for anything else.
+   ========================================================================= */
+
+let tupletIdCounter = 1;
+
+class Tuplet {
+  constructor(division, genConfig) {
+    this.id = 'tp' + (tupletIdCounter++);
+    this.division = Math.max(2, division | 0);
+    // children[slotIndex] = nested Tuplet subdividing that slot, if any
+    this.children = new Array(this.division).fill(null);
+    // Which generator fills this node's own slots, and its params. Default
+    // (no config) is "every slot onsets" — the original behavior — so a
+    // freshly-created tuplet still sounds exactly as before until the user
+    // picks a generator.
+    this.genConfig = genConfig || null;
+    this.pattern = this.computePattern();
+  }
+
+  // Runs this node's own generator against its division, returning a
+  // binary array of length `division`. Falls back to all-onsets if there's
+  // no generator configured, or if the configured one errors out (e.g. an
+  // in-progress edit with k > n) — a silently-empty tuplet is worse than a
+  // stale-but-audible one.
+  computePattern() {
+    if (!this.genConfig || !this.genConfig.algo) return new Array(this.division).fill(1);
+    const { pattern } = generatePatternPure(this.genConfig.algo, this.division, this.genConfig.params);
+    return pattern || new Array(this.division).fill(1);
+  }
+
+  setGenerator(genConfig) {
+    this.genConfig = genConfig || null;
+    this.pattern = this.computePattern();
+  }
+
+  // Fractional onset positions (0..1, exclusive of 1) within this node's
+  // own span, one per onsetting leaf slot, expanded recursively through
+  // children. A slot with a nested child defers entirely to that child's
+  // own onsets (the child's generator decides what plays inside it); a
+  // leaf slot only contributes an onset if this node's own pattern has a
+  // 1 there.
+  onsetFractions() {
+    const out = [];
+    for (let i = 0; i < this.division; i++) {
+      const slotStart = i / this.division;
+      const slotWidth = 1 / this.division;
+      const child = this.children[i];
+      if (child) {
+        child.onsetFractions().forEach(f => out.push(slotStart + f * slotWidth));
+      } else if (this.pattern[i]) {
+        out.push(slotStart);
+      }
+    }
+    return out;
+  }
+
+  // Convenience: fractional [start,end) of every leaf slot (for drawing
+  // tick marks / nested arcs), tagged with depth and onset state.
+  leafSlots(depth) {
+    depth = depth || 0;
+    const out = [];
+    for (let i = 0; i < this.division; i++) {
+      const slotStart = i / this.division;
+      const slotWidth = 1 / this.division;
+      const child = this.children[i];
+      if (child) {
+        child.leafSlots(depth + 1).forEach(s => out.push({
+          start: slotStart + s.start * slotWidth,
+          end: slotStart + s.end * slotWidth,
+          depth: s.depth,
+          onset: s.onset,
+        }));
+      } else {
+        out.push({ start: slotStart, end: slotStart + slotWidth, depth, onset: !!this.pattern[i] });
+      }
+    }
+    return out;
+  }
+
+  // Deep clone (including nested children), used to snapshot a tuplet
+  // before a live edit begins so an in-progress edit can be reverted
+  // exactly if the user cancels instead of confirming it.
+  clone() {
+    const copy = new Tuplet(this.division, this.genConfig ? { algo: this.genConfig.algo, params: { ...this.genConfig.params } } : null);
+    copy.id = this.id;
+    copy.children = this.children.map(c => c ? c.clone() : null);
+    return copy;
+  }
+}
+
+// The span's length in base steps, from its two boundary markers. The two
+// clicked points are boundaries, not both "occupied" steps, so the span
+// covers the time between them — endStep - startStep base steps, wrapping
+// around the cycle. A zero-length wrap (start === end) means "the whole
+// cycle", not zero base steps.
+function spanLengthInSteps(startStep, endStep, n) {
+  const raw = ((endStep - startStep + n) % n);
+  return raw === 0 ? n : raw;
+}
+
+// A root-level tuplet anchored to a clockwise range of base steps
+// [startStep..endStep) (endStep exclusive — it's the boundary where the
+// tuplet hands back to the base grid), wrapping if endStep < startStep.
+class TupletSpan {
+  constructor(startStep, endStep, division, genConfig) {
+    this.id = 'span' + (tupletIdCounter++);
+    this.startStep = startStep;
+    this.endStep = endStep;
+    this.root = new Tuplet(division, genConfig);
+    // When true, base-grid onsets that fall inside this span's range are
+    // silenced (treated as rests) wherever the underlying base pattern
+    // would otherwise sound them, so this tuplet's own rhythm is the only
+    // thing heard/drawn across its span instead of the two layers
+    // overlapping. On by default for a freshly-created tuplet.
+    this.overrideBase = true;
+  }
+
+  lengthInSteps(n) {
+    return spanLengthInSteps(this.startStep, this.endStep, n);
+  }
+
+  containsStep(step, n) {
+    const len = this.lengthInSteps(n);
+    return modulo(step - this.startStep, n) < len;
+  }
+
+  // This span's onset fractions, mapped into absolute step-position space
+  // (still fractional — e.g. step 3.33), so they sit alongside the base
+  // pattern's integer step positions on the same timeline.
+  onsetStepPositions(n) {
+    const len = this.lengthInSteps(n);
+    return this.root.onsetFractions().map(f => modulo(this.startStep + f * len, n));
+  }
+
+  // Deep clone, used to snapshot a span before a live edit begins (see
+  // Tuplet.clone above).
+  clone() {
+    const copy = new TupletSpan(this.startStep, this.endStep, this.root.division, null);
+    copy.id = this.id;
+    copy.root = this.root.clone();
+    copy.overrideBase = this.overrideBase;
+    return copy;
+  }
+}
+
+
+function findTupletAtStep(step, n) {
+  return state.tuplets.find(sp => sp.containsStep(step, n)) || null;
+}
+
+// Walks start..end (inclusive, wrapping) to depth-1 slot index if the
+// two clicked points land in different slots of the same node's division,
+// used to figure out which slot range a new nested tuplet should cover.
+function slotIndexForFraction(node, frac) {
+  const idx = Math.floor(frac * node.division);
+  return Math.min(node.division - 1, Math.max(0, idx));
+}
+
 /* =========================================================================
    Application state + UI wiring
    ========================================================================= */
@@ -1012,8 +1440,32 @@ const state = {
   currentStep: 0,
   timeouts: [],
   visInterval: null,
+  // Which scheduler loop state.visInterval currently is: true once it's
+  // running tupletScheduleTick, false while it's the plain-grid tick().
+  // Lets scheduleIfPlaying() detect the moment a tuplet is first added
+  // mid-playback (or the last one removed) and swap the interval itself,
+  // not just the timeline content it's reading from.
+  tupletSchedulerActive: false,
   audioCtx: null,
   grid: { stages: [], selected: 0 },
+
+  // Tuplets: user-drawn spans overlaid on the base step pattern. Each entry
+  // is a root Tuplet node (see class below) anchored to a range of base
+  // steps. Nested tuplets live as children inside a node's own fractional
+  // span, so a click inside an existing tuplet subdivides *that* slice
+  // rather than the base grid.
+  tuplets: [],
+  tupletMode: false,
+  tupletArm: null, // { kind: 'base', step } or { kind: 'node', node, slot } — first of the two clicked points
+
+  // Last position the playhead was actually drawn at, as a fractional
+  // position in [0, n) base-step units (an integer step index counts as
+  // a whole number here). Updated by fireStep/fireFractionalStep every
+  // time they move the playhead, and read back by drawCircle() so a
+  // mid-playback SVG rebuild (e.g. from a live tuplet-parameter edit)
+  // redraws the playhead where it actually is instead of snapping it
+  // back to step 0 until the next scheduled tick corrects it.
+  lastPlayheadFrac: 0,
 };
 
 function getEl(id) { return document.getElementById(id); }
@@ -1232,6 +1684,7 @@ const algoLabels = {
 function refreshCurrentAlgo() {
   const result = computers[state.algo]();
   if (!result) return;
+  const nChanged = result.n !== state.n;
   state.n = result.n;
   state.pattern = result.pattern;
   state.weights = result.weights || null;
@@ -1240,8 +1693,20 @@ function refreshCurrentAlgo() {
   getEl('stepCountReadout').textContent = state.n;
   getEl('onsetCountReadout').textContent = result.pattern.reduce((a, b) => a + b, 0);
   if (state.currentStep >= state.n) state.currentStep = 0;
+
+  // A step count change can leave existing tuplet spans pointing past the
+  // new cycle length, or overlapping in ways that were only valid before —
+  // simplest correct behaviour is to drop spans that no longer fit cleanly.
+  if (nChanged && state.tuplets.length) {
+    state.tuplets = state.tuplets.filter(sp => sp.startStep < state.n && sp.endStep < state.n);
+    updateTupletModeUI();
+  }
+
   drawCircle();
-  if (state.playing) fireStep(state.currentStep);
+  if (state.playing) {
+    if (hasTuplets()) scheduleIfPlaying();
+    else fireStep(state.currentStep);
+  }
 }
 
 /* =========================================================================
@@ -1254,6 +1719,12 @@ const CENTER = VIEW / 2;
 const R_DOTS = 168;
 const DOT_R_REST = 5;
 const DOT_R_ONSET = 8;
+// Tuplet arcs nest outward from the dot ring, one ring per depth level.
+// The SVG has overflow:visible and the stage now carries extra top
+// margin (see .circle-wrap CSS) specifically so this can sit clear of
+// the step-dot ring instead of crowding it.
+const R_TUPLET_BASE = R_DOTS + 52;
+const R_TUPLET_STEP = 20;
 
 function polarToXY(index, total, radius) {
   const angle = (index / total) * Math.PI * 2 - Math.PI / 2; // start at 12 o'clock
@@ -1261,6 +1732,35 @@ function polarToXY(index, total, radius) {
     x: CENTER + radius * Math.cos(angle),
     y: CENTER + radius * Math.sin(angle),
   };
+}
+
+// Same as polarToXY but for a fractional position in [0,1) around the
+// full circle, used for tuplet onsets that fall off the base step grid.
+function fracToXY(frac, radius) {
+  const angle = frac * Math.PI * 2 - Math.PI / 2;
+  return {
+    x: CENTER + radius * Math.cos(angle),
+    y: CENTER + radius * Math.sin(angle),
+  };
+}
+
+function describeArc(fracStart, fracEnd, radius) {
+  let sweep = fracEnd - fracStart;
+  if (sweep < 0) sweep += 1;
+  // A sweep that lands on (or numerically just past) a full turn draws as
+  // a degenerate zero-length arc in SVG, since the start/end points
+  // coincide. Split it into two half-turn arcs so a full-circle span
+  // still renders as a complete ring instead of vanishing.
+  if (sweep >= 1 - 1e-9) {
+    const half = fracStart + 0.5;
+    return describeArc(fracStart, half, radius) + ' ' + describeArc(half, fracStart, radius);
+  }
+  const a0 = fracStart * Math.PI * 2 - Math.PI / 2;
+  const a1 = fracEnd * Math.PI * 2 - Math.PI / 2;
+  const p0 = { x: CENTER + radius * Math.cos(a0), y: CENTER + radius * Math.sin(a0) };
+  const p1 = { x: CENTER + radius * Math.cos(a1), y: CENTER + radius * Math.sin(a1) };
+  const largeArc = sweep > 0.5 ? 1 : 0;
+  return `M ${p0.x} ${p0.y} A ${radius} ${radius} 0 ${largeArc} 1 ${p1.x} ${p1.y}`;
 }
 
 function restingOnsetRadius(i) {
@@ -1284,8 +1784,14 @@ function drawCircle() {
 
   const n = state.n;
   const pattern = state.pattern;
+  // Base steps silenced by an overrideBase tuplet render (and behave) as
+  // rests for the step dots and for what buildTupletTimeline() actually
+  // plays. The connective polygon/spokes, however, always trace the
+  // original base pattern regardless of override — overriding a tuplet
+  // span turns those onsets into rests, it doesn't reshape the figure.
+  const effectivePattern = pattern.map((v, i) => (v > 0 && !isStepOverriddenByTuplet(i, n)) ? 1 : 0);
   const onsetIdx = [];
-  pattern.forEach((v, i) => { if (v) onsetIdx.push(i); });
+  pattern.forEach((v, i) => { if (v > 0) onsetIdx.push(i); });
 
   // Base ring (track)
   const ring = document.createElementNS(SVG_NS, 'circle');
@@ -1297,7 +1803,10 @@ function drawCircle() {
   ring.setAttribute('stroke-width', '1');
   svg.appendChild(ring);
 
-  // Connective polygon across active onsets
+  // Connective polygon across the base pattern's own onsets — drawn from
+  // the original pattern (not effectivePattern) so an overrideBase tuplet
+  // silencing some of these steps doesn't reshape the polygon; it only
+  // changes how the step dots themselves render below.
   if (onsetIdx.length > 1) {
     const pts = onsetIdx.map(i => polarToXY(i, n, R_DOTS));
     const poly = document.createElementNS(SVG_NS, 'polygon');
@@ -1321,11 +1830,16 @@ function drawCircle() {
     svg.appendChild(line);
   });
 
-  // Playhead radius line
+  // Playhead radius line — drawn at the last position it was actually
+  // fired at (state.lastPlayheadFrac), not always step 0, so rebuilding
+  // the SVG mid-playback (e.g. a live tuplet-parameter edit calling
+  // drawCircle) doesn't visually snap the playhead back to the start
+  // until the next scheduled tick corrects it.
   const playLine = document.createElementNS(SVG_NS, 'line');
   playLine.setAttribute('id', 'playheadLine');
   playLine.setAttribute('x1', CENTER); playLine.setAttribute('y1', CENTER);
-  const initial = polarToXY(0, n, R_DOTS);
+  const restoredFrac = state.playing ? modulo(state.lastPlayheadFrac, n) : 0;
+  const initial = fracToXY(restoredFrac / n, R_DOTS);
   playLine.setAttribute('x2', initial.x); playLine.setAttribute('y2', initial.y);
   playLine.setAttribute('stroke', 'var(--orange)');
   playLine.setAttribute('stroke-width', '1.5');
@@ -1335,7 +1849,8 @@ function drawCircle() {
   // Step dots
   for (let i = 0; i < n; i++) {
     const p = polarToXY(i, n, R_DOTS);
-    const isOn = pattern[i] > 0;
+    const isOn = effectivePattern[i] > 0;
+    const isOverridden = pattern[i] > 0 && !isOn;
     const g = document.createElementNS(SVG_NS, 'g');
     g.setAttribute('class', 'step-dot');
     g.dataset.index = i;
@@ -1345,6 +1860,13 @@ function drawCircle() {
     circle.setAttribute('cy', p.y);
     circle.setAttribute('r', isOn ? restingOnsetRadius(i) : DOT_R_REST);
     circle.setAttribute('fill', isOn ? 'var(--blue)' : 'var(--border-strong)');
+    // An overridden step keeps a thin blue outline (its underlying "1" is
+    // still there, just silenced) so it reads differently from a step
+    // that was always a plain rest.
+    if (isOverridden) {
+      circle.setAttribute('stroke', 'var(--blue-dim)');
+      circle.setAttribute('stroke-width', '1.5');
+    }
     circle.setAttribute('id', 'dot-' + i);
     circle.style.transition = 'r 0.08s ease, fill 0.08s ease';
     g.appendChild(circle);
@@ -1362,12 +1884,1046 @@ function drawCircle() {
     text.textContent = i;
     g.appendChild(text);
 
+    if (state.tupletMode) {
+      g.classList.toggle('armed', state.tupletArm && state.tupletArm.kind === 'base' && state.tupletArm.step === i);
+      g.style.cursor = 'pointer';
+      g.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onBaseStepClick(i);
+      });
+    }
+
     svg.appendChild(g);
   }
+
+  drawTuplets(svg);
+}
+
+/* ---------------------------- Tuplet rendering ---------------------------- */
+
+function drawTuplets(svg) {
+  const n = state.n;
+  state.tuplets.forEach(span => {
+    const len = span.lengthInSteps(n);
+    const fracStart = span.startStep / n;
+    const fracEnd = fracStart + len / n;
+    // A tuplet's arc shows only its own division (e.g. the 3 ticks/onsets
+    // of a triplet) — the underlying base-grid step positions are already
+    // visible on the main ring, so they're intentionally not re-drawn on
+    // top of the tuplet arc here. (Previously the base pattern's onsets
+    // inside this span were overlaid as small blue dots on the arc itself,
+    // which mixed the two grids together on one line and made the arc's
+    // own division harder to read.)
+    drawTupletNode(svg, span.root, fracStart, fracEnd, 0, { spanId: span.id, path: [] }, []);
+  });
+}
+
+function drawTupletNode(svg, node, fracStart, fracEnd, depth, addr) {
+  const radius = R_TUPLET_BASE + depth * R_TUPLET_STEP;
+  const width = fracEnd - fracStart;
+  const d = describeArc(fracStart, fracEnd, radius);
+
+  // Invisible wide-stroke hit target, layered under the visible arc, so
+  // the click area is comfortably wider than the thin drawn line without
+  // changing how the arc looks.
+  const arcHit = document.createElementNS(SVG_NS, 'path');
+  arcHit.setAttribute('d', d);
+  arcHit.setAttribute('fill', 'none');
+  arcHit.setAttribute('stroke', 'transparent');
+  arcHit.setAttribute('stroke-width', '14');
+  arcHit.style.cursor = 'pointer';
+  arcHit.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openTupletEditor(addr, fracToXY(fracStart + width / 2, radius));
+  });
+  // Note: this stays clickable even in tuplet placement mode. The small
+  // boundary-point hitzones (.tuplet-hitzone) are drawn after this path
+  // and sit on top at their exact spots, so a click precisely on a
+  // boundary still reaches them for placement — this only picks up
+  // clicks on the rest of the arc, which is what lets "click its arc to
+  // edit" (see the hint in onBaseStepClick) actually work while armed.
+  svg.appendChild(arcHit);
+
+  // Bracket arc across this node's whole span (the visible line)
+  const arc = document.createElementNS(SVG_NS, 'path');
+  arc.setAttribute('d', d);
+  arc.setAttribute('class', 'tuplet-arc');
+  if (depth > 0) arc.style.opacity = Math.max(0.45, 1 - depth * 0.18);
+  arc.style.cursor = 'pointer';
+  arc.style.pointerEvents = 'none'; // the wide hit target above handles clicks; this just draws
+  svg.appendChild(arc);
+  arcHit.addEventListener('mouseenter', () => arc.classList.add('hover'));
+  arcHit.addEventListener('mouseleave', () => arc.classList.remove('hover'));
+
+  // Ratio label at the arc's midpoint (e.g. "3:4" — division against the
+  // number of base steps this whole node's span occupies)
+  const midFrac = fracStart + width / 2;
+  const labelPos = fracToXY(midFrac, radius + 13);
+  const label = document.createElementNS(SVG_NS, 'text');
+  label.setAttribute('x', labelPos.x);
+  label.setAttribute('y', labelPos.y);
+  label.setAttribute('class', depth > 0 ? 'tuplet-label nested' : 'tuplet-label');
+  label.dataset.tupletLabel = '1';
+  label.textContent = node.division;
+  label.style.cursor = 'pointer';
+  label.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openTupletEditor(addr, labelPos);
+  });
+  svg.appendChild(label);
+
+  // Cross-highlight: hovering the arc (via its wide invisible hit target)
+  // also highlights the division label, and hovering the label highlights
+  // the arc — since clicking either one opens the same editor for this
+  // node, hovering either should visually tie them together.
+  arcHit.addEventListener('mouseenter', () => label.classList.add('hover'));
+  arcHit.addEventListener('mouseleave', () => label.classList.remove('hover'));
+  label.addEventListener('mouseenter', () => arc.classList.add('hover'));
+  label.addEventListener('mouseleave', () => arc.classList.remove('hover'));
+
+  // Slot dots at each division boundary — mirrors the main circle's
+  // step dots (a dot at every slot, dim when it's a rest, bright when it
+  // onsets) rather than drawing separate tick-mark lines for the
+  // divisions. Nested-child slots don't get a dot here since the child
+  // draws its own dots one level out.
+  for (let i = 0; i <= node.division; i++) {
+    const slotFrac = fracStart + (i / node.division) * width;
+
+    // Skip the very last boundary (i === node.division): it's the same
+    // point as slot 0 of whatever sits beyond this node's span, and that
+    // neighboring node already draws a dot there.
+    const isBoundarySlot = i === node.division;
+    const hasNestedChild = i < node.division && node.children[i];
+
+    if (!isBoundarySlot && !hasNestedChild) {
+      const onsets = node.pattern[i] > 0;
+      const dotPos = fracToXY(slotFrac, radius);
+      const restR = depth > 0 ? 2.5 : 3;
+      const onsetR = depth > 0 ? 3.5 : 4.5;
+      const onFill = depth > 0 ? '#7ba7e8' : 'var(--blue)';
+      const restFill = 'var(--border-strong)';
+      const onsetDot = document.createElementNS(SVG_NS, 'circle');
+      onsetDot.setAttribute('cx', dotPos.x);
+      onsetDot.setAttribute('cy', dotPos.y);
+      onsetDot.setAttribute('r', onsets ? onsetR : restR);
+      onsetDot.setAttribute('fill', onsets ? onFill : restFill);
+      onsetDot.classList.add('tuplet-onset-dot');
+      if (onsets) {
+        // fireFractionalStep compares this against absolute base-step-unit
+        // fracs (same units as onsetStepPositions()/the scheduled timeline,
+        // i.e. in [0, state.n)) — NOT circle-fraction units like slotFrac
+        // above. Converting here (× state.n) is what makes every onset
+        // after the very first one (which happened to be 0 in both unit
+        // systems, masking this everywhere else) actually match and pulse
+        // when it fires.
+        onsetDot.dataset.frac = String(slotFrac * state.n);
+      }
+      onsetDot.dataset.restR = String(restR);
+      onsetDot.dataset.restFill = onsets ? onFill : restFill;
+      onsetDot.style.transition = 'r 0.08s ease, fill 0.08s ease';
+      svg.appendChild(onsetDot);
+    }
+
+    // Clickable boundary point (skip the very last one, which is the same
+    // point as slot 0 of whatever sits beyond this node's span)
+    if (i < node.division && state.tupletMode) {
+      const hitPos = fracToXY(slotFrac, radius);
+      const hit = document.createElementNS(SVG_NS, 'circle');
+      hit.setAttribute('cx', hitPos.x);
+      hit.setAttribute('cy', hitPos.y);
+      hit.setAttribute('r', 7);
+      hit.setAttribute('class', 'tuplet-hitzone');
+      const armed = state.tupletArm && state.tupletArm.kind === 'node'
+        && state.tupletArm.spanId === addr.spanId
+        && arraysEqual(state.tupletArm.path, addr.path) && state.tupletArm.slot === i;
+      hit.setAttribute('fill', armed ? 'var(--orange)' : 'transparent');
+      hit.setAttribute('opacity', armed ? '0.9' : '1');
+      hit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onNodeSlotClick(addr, i);
+      });
+      svg.appendChild(hit);
+    }
+
+    // Recurse into any nested child at slot i, drawing its own division
+    // the same way (arcs never show anything but their own subdivision).
+    if (i < node.division && node.children[i]) {
+      const childFracStart = fracStart + (i / node.division) * width;
+      const childFracEnd = fracStart + ((i + 1) / node.division) * width;
+      drawTupletNode(svg, node.children[i], childFracStart, childFracEnd, depth + 1, {
+        spanId: addr.spanId,
+        path: addr.path.concat(i),
+      });
+    }
+  }
+}
+
+function arraysEqual(a, b) {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/* ---------------------------- Tuplet lookups ---------------------------- */
+
+function spanById(id) { return state.tuplets.find(sp => sp.id === id) || null; }
+
+// Walks a path of slot indices down from a span's root node, returning the
+// node that *owns* the last index in the path (i.e. the parent of the
+// slot the path points at), plus that final slot index.
+function resolveParent(span, path) {
+  let node = span.root;
+  for (let i = 0; i < path.length - 1; i++) {
+    node = node.children[path[i]];
+    if (!node) return null;
+  }
+  return { node, slot: path[path.length - 1] };
+}
+
+function resolveNodeAtPath(span, path) {
+  let node = span.root;
+  for (const slot of path) {
+    node = node.children[slot];
+    if (!node) return null;
+  }
+  return node;
+}
+
+/* ---------------------------- Tuplet interaction ---------------------------- */
+
+function setTupletHint(msg) {
+  getEl('tupletHint').textContent = msg || '';
+}
+
+function updateTupletModeUI() {
+  const btn = getEl('tupletModeBtn');
+  btn.classList.toggle('active', state.tupletMode);
+  btn.textContent = state.tupletMode ? 'Click two points…' : 'Add tuplet';
+  getEl('tupletClearBtn').disabled = state.tuplets.length === 0;
+  if (!state.tupletMode) setTupletHint('');
+  else if (!state.tupletArm) setTupletHint('Click a step to start a tuplet span.');
+}
+
+function toggleTupletMode() {
+  state.tupletMode = !state.tupletMode;
+  state.tupletArm = null;
+  closeTupletPopover();
+  updateTupletModeUI();
+  drawCircle();
+}
+
+function clearTuplets() {
+  state.tuplets = [];
+  state.tupletArm = null;
+  closeTupletPopover();
+  updateTupletModeUI();
+  drawCircle();
+  scheduleIfPlaying();
+}
+
+// First click on a base-grid step: arms it. Second click on a different
+// base step: opens the editor to choose how many parts to divide the
+// span between them into. Clicking back inside an *existing* span's
+// tuplet arc instead is handled by onNodeSlotClick.
+function onBaseStepClick(step) {
+  if (!state.tupletMode) return;
+
+  const existing = findTupletAtStep(step, state.n);
+  if (existing && !state.tupletArm) {
+    // Stepping onto a step that's already inside a tuplet re-enters that
+    // tuplet's own boundary points instead of starting a new overlapping span.
+    setTupletHint('That step is already inside a tuplet — click its arc to edit or nest further.');
+    return;
+  }
+
+  if (!state.tupletArm) {
+    state.tupletArm = { kind: 'base', step };
+    setTupletHint('Now click a second step to complete the span.');
+    drawCircle();
+    return;
+  }
+
+  if (state.tupletArm.kind !== 'base') {
+    // switched targets mid-selection — restart cleanly on the base grid
+    state.tupletArm = { kind: 'base', step };
+    setTupletHint('Now click a second step to complete the span.');
+    drawCircle();
+    return;
+  }
+
+  if (state.tupletArm.step === step) {
+    // clicked the same point twice — treat as cancel
+    state.tupletArm = null;
+    setTupletHint('Selection cleared. Click a step to start a tuplet span.');
+    drawCircle();
+    return;
+  }
+
+  const startStep = state.tupletArm.step;
+  const endStep = step;
+  // Guard against the new span overlapping an existing tuplet (coexisting
+  // with the plain base pattern is fine — only two tuplets claiming the
+  // same time range at once is the problem, since their subdivisions
+  // would conflict).
+  const len = spanLengthInSteps(startStep, endStep, state.n);
+  for (let k = 0; k < len; k++) {
+    const s = (startStep + k) % state.n;
+    if (findTupletAtStep(s, state.n)) {
+      setTupletHint('That range overlaps an existing tuplet — pick a clear range, or clear tuplets first.');
+      state.tupletArm = null;
+      drawCircle();
+      return;
+    }
+  }
+
+  // One-shot signal for the very next openTupletEditor call below — it
+  // must not linger afterwards. If it's left set, a later nested-tuplet
+  // click (which opens the editor again while this root's popover is
+  // still open) would see this stale pendingSpan and re-enter create-root
+  // instead of create-nested, silently creating a second overlapping root
+  // tuplet instead of nesting into the intended slot.
+  state.pendingSpan = { startStep, endStep };
+  state.tupletArm = null;
+  const p0 = polarToXY(startStep, state.n, R_DOTS);
+  const p1 = polarToXY(endStep, state.n, R_DOTS);
+  const mid = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+  openTupletEditor(null, mid, len);
+  state.pendingSpan = null;
+}
+
+// Click on an existing tuplet's slot boundary. First click arms it; a
+// second click on the *next* boundary over (same parent node) subdivides
+// that one slot into a nested tuplet — or, if that slot is already
+// nested, opens its editor instead of overwriting it. A nested tuplet's
+// ratio label also opens the same editor directly.
+function onNodeSlotClick(addr, slot) {
+  if (!state.tupletMode) return;
+  const span = spanById(addr.spanId);
+  if (!span) return;
+  const node = resolveNodeAtPath(span, addr.path);
+  if (!node) return;
+
+  if (state.tupletArm && state.tupletArm.kind === 'node'
+      && state.tupletArm.spanId === addr.spanId
+      && arraysEqual(state.tupletArm.path, addr.path)) {
+    if (state.tupletArm.slot === slot) {
+      state.tupletArm = null;
+      setTupletHint('Selection cleared.');
+      drawCircle();
+      return;
+    }
+    // A nested tuplet subdivides exactly one slot of its parent (that's
+    // the model's leaf unit) — so the two clicks must bound a single slot,
+    // i.e. land on adjacent boundaries. Anything wider doesn't have a
+    // lossless representation, so it's rejected rather than silently
+    // dropping the slots in between.
+    const a = Math.min(state.tupletArm.slot, slot);
+    const b = Math.max(state.tupletArm.slot, slot);
+    state.tupletArm = null;
+    if (b - a !== 1) {
+      setTupletHint('Nesting subdivides one slot at a time — click two adjacent boundary points.');
+      drawCircle();
+      return;
+    }
+    state.pendingNested = { spanId: addr.spanId, parentPath: addr.path, slot: a };
+    // If that slot already holds a nested tuplet, edit it instead of
+    // silently overwriting it with a fresh one.
+    if (node.children[a]) {
+      state.pendingNested = null;
+      openTupletEditor({ spanId: addr.spanId, path: addr.path.concat(a) }, null);
+      return;
+    }
+    // One-shot signal for the very next openTupletEditor call, same
+    // reasoning as pendingSpan in onBaseStepClick — must not linger.
+    openTupletEditor(null, null, 1, true);
+    state.pendingNested = null;
+    return;
+  }
+
+  state.tupletArm = { kind: 'node', spanId: addr.spanId, path: addr.path, slot };
+  setTupletHint('Now click the next boundary point over to subdivide that slot.');
+  drawCircle();
+}
+
+/* ---------------------------- Popover editor ---------------------------- */
+
+let tupletEditorTarget = null; // { mode: 'create'|'edit', ...refs }
+// Which grid stage is currently selected in the popover's stage list, for
+// whichever node is being edited — separate from tupletEditorTarget so
+// switching algorithms or tweaking other params doesn't reset it, but
+// reset back to 0 whenever a fresh editor opens (see openTupletEditor).
+let tupletStageSelected = 0;
+// The last stage list actually computed for the popover, kept around so
+// clicking a row doesn't need to recompute grid() just to know how many
+// stages exist.
+let tupletStageCache = [];
+
+// Per-algorithm param field definitions: id suffix, label, default, and
+// (for grid) which base-algorithm selections should show it. Shared by
+// the render + read functions below so the two can't drift apart.
+const TUPLET_PARAM_FIELDS = {
+  euclid: [{ key: 'k', label: 'Onsets (k)', def: 3 }],
+  clough: [{ key: 'k', label: 'Onsets (k)', def: 3 }],
+  deep: [{ key: 'k', label: 'Onsets (k)', def: 3 }, { key: 'm', label: 'Multiplier (m)', def: 2 }],
+  tihai: [{ key: 'm', label: 'Modularity (m)', def: 3 }],
+  grid: [{ key: 'k', label: 'Onsets (k)', def: 3 }, { key: 'm', label: 'Mult/mod (m)', def: 2 }],
+};
+
+// Renders the param fields for the currently-selected algorithm into
+// #tupletAlgoParams. `existing` is a genConfig ({algo, params}) to
+// prefill from, or null for defaults.
+function renderTupletParamFields(existing) {
+  const container = getEl('tupletAlgoParams');
+  const algo = getEl('tupletAlgoSelect').value;
+  container.innerHTML = '';
+  if (algo === 'fill') return;
+
+  const p = (existing && existing.algo === algo && existing.params) ? existing.params : {};
+  const fields = TUPLET_PARAM_FIELDS[algo] || [];
+  const grid = document.createElement('div');
+  grid.className = 'tp-param-grid';
+  fields.forEach(f => {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const label = document.createElement('label');
+    label.textContent = f.label;
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.id = 'tp_param_' + f.key;
+    inp.value = p[f.key] != null ? p[f.key] : f.def;
+    wrap.appendChild(label);
+    wrap.appendChild(inp);
+    grid.appendChild(wrap);
+  });
+  container.appendChild(grid);
+
+  if (algo === 'grid') {
+    const groupWrap = document.createElement('div');
+    groupWrap.className = 'field';
+    groupWrap.style.marginTop = '8px';
+    const groupLabel = document.createElement('label');
+    groupLabel.textContent = 'Grouping vector';
+    const groupInp = document.createElement('input');
+    groupInp.type = 'text';
+    groupInp.id = 'tp_param_group';
+    groupInp.style.width = '100%';
+    groupInp.value = p.group != null ? p.group : '2,3';
+    groupWrap.appendChild(groupLabel);
+    groupWrap.appendChild(groupInp);
+    container.appendChild(groupWrap);
+  }
+
+  const rotWrap = document.createElement('div');
+  rotWrap.className = 'tp-param-grid';
+  rotWrap.style.marginTop = '8px';
+  [{ key: 'mode', label: 'Mode', def: 0 }, { key: 'rotation', label: 'Rotation', def: 0 }].forEach(f => {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const label = document.createElement('label');
+    label.textContent = f.label;
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.id = 'tp_param_' + f.key;
+    inp.value = p[f.key] != null ? p[f.key] : f.def;
+    wrap.appendChild(label);
+    wrap.appendChild(inp);
+    rotWrap.appendChild(wrap);
+  });
+  container.appendChild(rotWrap);
+
+  const checks = document.createElement('div');
+  const mk = (key, text, checked) => {
+    const row = document.createElement('div');
+    row.className = 'tp-checkbox-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = 'tp_param_' + key;
+    cb.checked = !!checked;
+    const lbl = document.createElement('label');
+    lbl.htmlFor = cb.id;
+    lbl.textContent = text;
+    row.appendChild(cb); row.appendChild(lbl);
+    return row;
+  };
+  checks.appendChild(mk('complement', 'Complement', p.complement));
+  checks.appendChild(mk('reverse', 'Reverse', p.reverse));
+  if (algo === 'tihai' || algo === 'grid') checks.appendChild(mk('pseudo', 'Pseudo-tihai', p.pseudo));
+  container.appendChild(checks);
+
+  // Newly-built fields start with no listeners — wire them for live
+  // apply (defined in the wiring section below; hoisted, so safe to call
+  // from here regardless of source order).
+  wireTupletParamFields();
+
+  const stageWrap = getEl('tupletStageListWrap');
+  if (algo === 'grid') {
+    // Seed the selected stage from the existing genConfig when opening an
+    // editor on an already-grid-generated node, so re-opening it doesn't
+    // silently snap back to stage 0. Reset to 0 for a fresh algorithm pick.
+    tupletStageSelected = (existing && existing.algo === 'grid' && existing.params && existing.params.stage != null)
+      ? existing.params.stage | 0
+      : 0;
+    stageWrap.style.display = 'block';
+    renderTupletStageList();
+  } else {
+    stageWrap.style.display = 'none';
+  }
+}
+
+// Computes and renders the grid algorithm's nested stages as a clickable
+// list in the popover — mirrors the main panel's renderStageList, but
+// scoped to whatever division the current tuplet node has (its own
+// division stands in for "n" here, since a tuplet's own slots are what's
+// being subdivided) and pointed at tupletStageSelected instead of
+// state.grid.selected. Click a stage to make it this node's actual
+// generated pattern.
+function renderTupletStageList() {
+  const list = getEl('tupletStageList');
+  list.innerHTML = '';
+  const division = Math.max(2, intOr(getEl('tupletDivisionInput').value, 3));
+  const getNum = (id, def) => { const el = getEl(id); return el ? intOr(el.value, def) : def; };
+  const k = getNum('tp_param_k', 3);
+  const m = getNum('tp_param_m', 2);
+  const groupData = ((getEl('tp_param_group') || {}).value || '2,3').split(',').map(s => parseInt(s.trim(), 10)).filter(x => !isNaN(x));
+  const mode = getNum('tp_param_mode', 0);
+  const rotation = getNum('tp_param_rotation', 0);
+  const complement = !!(getEl('tp_param_complement') || {}).checked;
+  const reverse = !!(getEl('tp_param_reverse') || {}).checked;
+  const pseudo = !!(getEl('tp_param_pseudo') || {}).checked;
+
+  if (groupData.length === 0 || k > division) {
+    tupletStageCache = [];
+    return;
+  }
+  let stages;
+  try {
+    const group = new IntervalVector(groupData, division, 0);
+    stages = grid(division, k, m, group, false, 0, 'euclid', pseudo, mode, rotation, complement, reverse);
+  } catch (e) {
+    tupletStageCache = [];
+    return;
+  }
+  tupletStageCache = stages;
+  tupletStageSelected = Math.min(tupletStageSelected, stages.length - 1);
+  const globalMax = Math.max(1, ...stages[stages.length - 1]);
+
+  stages.forEach((stage, idx) => {
+    const row = document.createElement('div');
+    row.className = 'stage-row' + (idx === tupletStageSelected ? ' selected' : '');
+
+    const label = document.createElement('span');
+    label.className = 'stage-idx';
+    label.textContent = 'Stage ' + idx;
+    row.appendChild(label);
+
+    const bars = document.createElement('span');
+    bars.className = 'stage-bars';
+    stage.forEach(v => {
+      const bar = document.createElement('span');
+      bar.className = 'mini-bar' + (v > 0 ? ' filled' : '');
+      bar.style.height = v === 0 ? '20%' : (20 + 80 * ((globalMax - v + 1) / globalMax)) + '%';
+      bars.appendChild(bar);
+    });
+    row.appendChild(bars);
+
+    row.addEventListener('click', () => {
+      tupletStageSelected = idx;
+      renderTupletStageList();
+      applyTupletEditorLive();
+    });
+    list.appendChild(row);
+  });
+}
+
+// Reads the current form (algo select + whatever param fields are showing)
+// into a genConfig object, or null for "all onsets".
+function readTupletGenConfig() {
+  const algo = getEl('tupletAlgoSelect').value;
+  if (algo === 'fill') return null;
+  const params = {};
+  const getNum = (id, def) => { const el = getEl(id); return el ? intOr(el.value, def) : def; };
+  (TUPLET_PARAM_FIELDS[algo] || []).forEach(f => { params[f.key] = getNum('tp_param_' + f.key, f.def); });
+  if (algo === 'grid') {
+    params.group = (getEl('tp_param_group') || {}).value || '2,3';
+    params.gridAlgo = 'euclid'; // nested per-tuplet grid keeps a fixed base algorithm to keep the popover from needing a third level of conditional fields
+    params.stage = tupletStageSelected | 0;
+  }
+  params.mode = getNum('tp_param_mode', 0);
+  params.rotation = getNum('tp_param_rotation', 0);
+  params.complement = !!(getEl('tp_param_complement') || {}).checked;
+  params.reverse = !!(getEl('tp_param_reverse') || {}).checked;
+  params.pseudo = !!(getEl('tp_param_pseudo') || {}).checked;
+  return { algo, params };
+}
+
+function validateTupletGenConfig(genConfig, division) {
+  const errorEl = getEl('tupletAlgoError');
+  errorEl.textContent = '';
+  if (!genConfig) return true;
+  const { error } = generatePatternPure(genConfig.algo, division, genConfig.params);
+  if (error) { errorEl.textContent = error; return false; }
+  return true;
+}
+
+function openTupletEditor(existingAddr, anchorXY, impliedSpan, isNested) {
+  const pop = getEl('tupletPopover');
+  const title = getEl('tupletPopoverTitle');
+  const input = getEl('tupletDivisionInput');
+  const ratio = getEl('tupletRatioReadout');
+  const deleteRow = getEl('tupletDeleteRow');
+  const algoSelect = getEl('tupletAlgoSelect');
+  getEl('tupletAlgoError').textContent = '';
+
+  if (existingAddr) {
+    // Opened by clicking an existing node's label or arc — this can happen
+    // mid-placement (tuplet mode on, one boundary point already armed), so
+    // clear any in-progress arm rather than leaving it to confuse the next
+    // click once this editor closes.
+    state.tupletArm = null;
+    // Editing an existing node (opened by clicking its label or arc).
+    // Snapshot the whole span as it stood before this edit so Cancel can
+    // restore it exactly, since every field change now applies live.
+    const span = spanById(existingAddr.spanId);
+    const node = resolveNodeAtPath(span, existingAddr.path);
+    if (!span || !node) return;
+    tupletEditorTarget = { mode: 'edit', spanId: existingAddr.spanId, path: existingAddr.path, snapshot: span.clone() };
+    title.textContent = existingAddr.path.length === 0 ? 'Edit tuplet' : 'Edit nested tuplet';
+    input.value = node.division;
+    deleteRow.style.display = 'flex';
+    const genLabel = node.genConfig ? TUPLET_ALGO_LABELS[node.genConfig.algo] : 'All onsets';
+    ratio.textContent = (existingAddr.path.length === 0
+      ? `Spans steps ${span.startStep}–${span.endStep} (${span.lengthInSteps(state.n)} base steps)`
+      : 'Nested inside parent tuplet') + ` · ${genLabel}`;
+    algoSelect.value = node.genConfig ? node.genConfig.algo : 'fill';
+    // The override toggle silences base-grid onsets across the *whole
+    // span* — that only makes sense at the root level; a nested tuplet
+    // already lives entirely inside its parent's span, with no base-grid
+    // onsets of its own to override.
+    const overrideRow = getEl('tupletOverrideRow');
+    if (existingAddr.path.length === 0) {
+      overrideRow.style.display = 'flex';
+      getEl('tupletOverrideToggle').checked = span.overrideBase;
+    } else {
+      overrideRow.style.display = 'none';
+    }
+    renderTupletParamFields(node.genConfig);
+    pop.classList.add('visible');
+    const pos = anchorXY || polarToXY(span.startStep, state.n, R_TUPLET_BASE);
+    positionPopover(pos);
+  } else if (state.pendingNested) {
+    // Checked before pendingSpan: pendingNested is always the more specific,
+    // more recently-armed request. Both flags are meant to be one-shot
+    // (consumed by the very next openTupletEditor call and cleared right
+    // after), but this order — plus clearing the *other* flag here too —
+    // means even a stray leftover can't hijack the wrong branch and quietly
+    // create/edit the wrong node.
+    state.pendingSpan = null;
+    tupletEditorTarget = { mode: 'create-nested', ...state.pendingNested, created: false };
+    title.textContent = 'New nested tuplet';
+    input.value = 3;
+    deleteRow.style.display = 'none';
+    ratio.textContent = 'Subdivides one slot of the parent tuplet';
+    algoSelect.value = 'fill';
+    getEl('tupletOverrideRow').style.display = 'none';
+    renderTupletParamFields(null);
+    pop.classList.add('visible');
+    const span = spanById(state.pendingNested.spanId);
+    const pos = span ? polarToXY(span.startStep, state.n, R_TUPLET_BASE + (state.pendingNested.parentPath.length + 1) * R_TUPLET_STEP) : { x: CENTER, y: CENTER };
+    positionPopover(pos);
+  } else if (state.pendingSpan) {
+    // Nothing exists yet — the very first live edit (below) is what
+    // actually creates the span; Cancel before that point just discards
+    // the pending click-pair with nothing to undo.
+    state.pendingNested = null;
+    tupletEditorTarget = { mode: 'create-root', ...state.pendingSpan, created: false };
+    title.textContent = 'New tuplet';
+    input.value = 3;
+    deleteRow.style.display = 'none';
+    ratio.textContent = impliedSpan + ' base step' + (impliedSpan === 1 ? '' : 's') + ' will be replaced by this many slots';
+    algoSelect.value = 'fill';
+    getEl('tupletOverrideRow').style.display = 'flex';
+    getEl('tupletOverrideToggle').checked = true;
+    renderTupletParamFields(null);
+    pop.classList.add('visible');
+    positionPopover(anchorXY);
+  } else {
+    return;
+  }
+
+  input.focus();
+  input.select();
+  // First live application so the preview (and, for create modes, the
+  // tuplet itself) exists immediately rather than only after the user
+  // touches a field.
+  applyTupletEditorLive();
+}
+
+function positionPopover(xy) {
+  const pop = getEl('tupletPopover');
+  const wrapRect = getEl('circleWrap').getBoundingClientRect();
+  let left, top;
+  if (xy && wrapRect.width) {
+    // xy is in SVG viewBox units (0..VIEW) — scale into the wrap's rendered box
+    const scale = wrapRect.width / VIEW;
+    left = wrapRect.left + xy.x * scale + 12;
+    top = wrapRect.top + xy.y * scale;
+  } else {
+    left = wrapRect.left + wrapRect.width / 2;
+    top = wrapRect.top + wrapRect.height / 2;
+  }
+  const margin = 8;
+  const popWidth = 250;
+  const popHeight = Math.min(pop.scrollHeight || 320, window.innerHeight * 0.8);
+  pop.style.left = Math.max(margin, Math.min(left, window.innerWidth - popWidth - margin)) + 'px';
+  pop.style.top = Math.max(margin, Math.min(top, window.innerHeight - popHeight - margin)) + 'px';
+}
+
+// Keeps the popover on-screen after its own content resizes (e.g.
+// switching generator algorithm changes how many param fields show),
+// without recomputing its anchor point — just re-clamps where it already is.
+function reclampPopover() {
+  const pop = getEl('tupletPopover');
+  if (!pop.classList.contains('visible')) return;
+  const margin = 8;
+  const popWidth = 250;
+  const popHeight = Math.min(pop.scrollHeight || 320, window.innerHeight * 0.8);
+  const rect = pop.getBoundingClientRect();
+  pop.style.left = Math.max(margin, Math.min(rect.left, window.innerWidth - popWidth - margin)) + 'px';
+  pop.style.top = Math.max(margin, Math.min(rect.top, window.innerHeight - popHeight - margin)) + 'px';
+}
+
+function closeTupletPopover() {
+  getEl('tupletPopover').classList.remove('visible');
+  tupletEditorTarget = null;
+  state.pendingSpan = null;
+  state.pendingNested = null;
+}
+
+// Resolves whichever node the popover is currently editing, for both
+// create and edit modes — used by renderTupletPreview below.
+function currentPreviewNode() {
+  if (!tupletEditorTarget) return null;
+  if (tupletEditorTarget.mode === 'create-root') {
+    const span = spanById(tupletEditorTarget.id);
+    return span ? span.root : null;
+  }
+  if (tupletEditorTarget.mode === 'create-nested') {
+    const span = spanById(tupletEditorTarget.spanId);
+    const parent = span && resolveNodeAtPath(span, tupletEditorTarget.parentPath);
+    return parent ? parent.children[tupletEditorTarget.slot] : null;
+  }
+  if (tupletEditorTarget.mode === 'edit') {
+    const span = spanById(tupletEditorTarget.spanId);
+    return span ? resolveNodeAtPath(span, tupletEditorTarget.path) : null;
+  }
+  return null;
+}
+
+// Small self-contained preview, live inside the popover, of whichever
+// tuplet node is currently being edited: one ring per nesting depth
+// (root innermost), each divided into that node's own `division` slots
+// with tick marks, and a dot per leaf slot showing onset/rest — the same
+// visual language as the main circle's tuplet arcs, but always visible
+// regardless of where the popover is anchored or what it might be
+// overlapping on the big circle. Re-run on every live edit and on every
+// playback step so the "playing" dot tracks along with real playback.
+const TP_PREVIEW_CENTER = 80;
+const TP_PREVIEW_BASE_R = 24;
+const TP_PREVIEW_STEP_R = 16;
+
+function renderTupletPreview() {
+  const svg = getEl('tupletPreviewSvg');
+  if (!svg) return;
+  svg.innerHTML = '';
+  const node = currentPreviewNode();
+  if (!node) return;
+
+  // How many ring levels this node's subtree actually uses, so a
+  // shallow (unnested) tuplet doesn't reserve empty outer rings.
+  const maxDepth = nodeMaxDepth(node);
+  // Where in the *root* span's own timeline playback currently sits,
+  // converted down into this previewed node's own local [0,1) fraction —
+  // used to light up the matching dot. Walks the same spanId+path used to
+  // resolve the previewed node itself (currentPreviewNode above), so a
+  // nested tuplet's preview tracks its own phase too, not just a root's.
+  // (Previously only a root-level preview ever got a non-null fraction —
+  // opening the editor on any nested tuplet while playing meant every dot
+  // in that preview stayed permanently unlit, since the "playing" check
+  // requires this to be non-null.)
+  let localPlayFrac = null;
+  if (state.playing && tupletEditorTarget) {
+    let spanId = null, path = null;
+    if (tupletEditorTarget.mode === 'create-root') {
+      spanId = tupletEditorTarget.id; path = [];
+    } else if (tupletEditorTarget.mode === 'create-nested') {
+      spanId = tupletEditorTarget.spanId; path = tupletEditorTarget.parentPath.concat(tupletEditorTarget.slot);
+    } else if (tupletEditorTarget.mode === 'edit') {
+      spanId = tupletEditorTarget.spanId; path = tupletEditorTarget.path;
+    }
+    const span = spanId ? spanById(spanId) : null;
+    if (span) {
+      const len = span.lengthInSteps(state.n);
+      const rel = modulo(modulo(state.lastPlayheadFrac, state.n) - span.startStep, state.n);
+      if (rel < len) {
+        // rootFrac is where playback sits within the *root* tuplet's own
+        // [0,1) span. Walk it down through `path` one slot at a time —
+        // same conversion drawPreviewRing does for its own children — so
+        // by the time we reach the previewed node, the fraction is local
+        // to *that* node instead of the root.
+        let frac = rel / len;
+        let node = span.root;
+        let ok = true;
+        for (const slot of path) {
+          const slotStart = slot / node.division;
+          const slotWidth = 1 / node.division;
+          if (frac < slotStart - 1e-9 || frac >= slotStart + slotWidth + 1e-9) { ok = false; break; }
+          frac = (frac - slotStart) / slotWidth;
+          node = node.children[slot];
+          if (!node) { ok = false; break; }
+        }
+        if (ok) localPlayFrac = Math.min(Math.max(frac, 0), 1 - 1e-9);
+      }
+    }
+  }
+
+  drawPreviewRing(svg, node, 0, maxDepth, localPlayFrac);
+}
+
+// How many levels deep node's own subtree goes (0 = no nested children).
+function nodeMaxDepth(node) {
+  let maxChild = -1;
+  node.children.forEach(c => { if (c) maxChild = Math.max(maxChild, nodeMaxDepth(c)); });
+  return 1 + maxChild;
+}
+
+function previewPolarToXY(frac, radius) {
+  const angle = frac * Math.PI * 2 - Math.PI / 2;
+  return {
+    x: TP_PREVIEW_CENTER + radius * Math.cos(angle),
+    y: TP_PREVIEW_CENTER + radius * Math.sin(angle),
+  };
+}
+
+function previewDescribeArc(fracStart, fracEnd, radius) {
+  let sweep = fracEnd - fracStart;
+  if (sweep < 0) sweep += 1;
+  if (sweep >= 1 - 1e-9) {
+    const half = fracStart + 0.5;
+    return previewDescribeArc(fracStart, half, radius) + ' ' + previewDescribeArc(half, fracStart, radius);
+  }
+  const p0 = previewPolarToXY(fracStart, radius);
+  const p1 = previewPolarToXY(fracEnd, radius);
+  const largeArc = sweep > 0.5 ? 1 : 0;
+  return `M ${p0.x} ${p0.y} A ${radius} ${radius} 0 ${largeArc} 1 ${p1.x} ${p1.y}`;
+}
+
+// Draws one ring for `node` (its full circle, since the preview always
+// shows a node as if it were the whole cycle rather than a slice of a
+// bigger one — the popover is about this node's own internal structure)
+// then recurses outward for any nested children, each occupying the
+// angular slice of its parent slot.
+function drawPreviewRing(svg, node, depth, maxDepth, localPlayFrac) {
+  const radius = TP_PREVIEW_BASE_R + depth * TP_PREVIEW_STEP_R;
+
+  const ring = document.createElementNS(SVG_NS, 'circle');
+  ring.setAttribute('cx', TP_PREVIEW_CENTER);
+  ring.setAttribute('cy', TP_PREVIEW_CENTER);
+  ring.setAttribute('r', radius);
+  ring.setAttribute('fill', 'none');
+  ring.setAttribute('stroke', 'var(--border)');
+  ring.setAttribute('stroke-width', '1');
+  svg.appendChild(ring);
+
+  for (let i = 0; i < node.division; i++) {
+    const slotStart = i / node.division;
+    const slotEnd = (i + 1) / node.division;
+    const child = node.children[i];
+
+    // Tick at this slot's leading edge
+    const inner = previewPolarToXY(slotStart, radius - 4);
+    const outer = previewPolarToXY(slotStart, radius + 4);
+    const tick = document.createElementNS(SVG_NS, 'line');
+    tick.setAttribute('x1', inner.x); tick.setAttribute('y1', inner.y);
+    tick.setAttribute('x2', outer.x); tick.setAttribute('y2', outer.y);
+    tick.setAttribute('stroke', 'var(--border-strong)');
+    tick.setAttribute('stroke-width', '1');
+    svg.appendChild(tick);
+
+    if (child) {
+      // A nested child fills this whole slot — draw a short bracket arc
+      // across the slot at this depth to show it hands off to a child
+      // ring, then recurse.
+      const bracket = document.createElementNS(SVG_NS, 'path');
+      bracket.setAttribute('d', previewDescribeArc(slotStart, slotEnd, radius));
+      bracket.setAttribute('fill', 'none');
+      bracket.setAttribute('stroke', 'var(--orange)');
+      bracket.setAttribute('stroke-width', '2');
+      bracket.setAttribute('opacity', Math.max(0.45, 1 - depth * 0.18));
+      svg.appendChild(bracket);
+
+      // Epsilon guard: an onset that lands exactly on slotStart can come
+      // out a hair below it after the accumulated division/modulo math in
+      // renderTupletPreview, which would make a strict >= miss it.
+      let childLocalFrac = null;
+      if (localPlayFrac !== null && localPlayFrac >= slotStart - 1e-9 && localPlayFrac < slotEnd - 1e-9) {
+        childLocalFrac = Math.min(Math.max((localPlayFrac - slotStart) / (slotEnd - slotStart), 0), 1 - 1e-9);
+      }
+      drawPreviewRing(svg, child, depth + 1, maxDepth, childLocalFrac);
+    } else {
+      // Leaf slot — draw its onset/rest dot at the slot's midpoint.
+      const isOn = !!node.pattern[i];
+      const midFrac = slotStart + (slotEnd - slotStart) / 2;
+      const pos = previewPolarToXY(midFrac, radius);
+      const isPlaying = localPlayFrac !== null && localPlayFrac >= slotStart - 1e-9 && localPlayFrac < slotEnd - 1e-9 && isOn;
+      const dot = document.createElementNS(SVG_NS, 'circle');
+      dot.setAttribute('cx', pos.x);
+      dot.setAttribute('cy', pos.y);
+      dot.setAttribute('r', isPlaying ? 5.5 : (isOn ? 4 : 3));
+      dot.setAttribute('fill', isPlaying ? 'var(--orange)' : (isOn ? 'var(--blue)' : 'var(--border-strong)'));
+      svg.appendChild(dot);
+    }
+  }
+
+  // Division label at the ring's own center-top-ish spot only for the
+  // innermost ring, so the preview reads "divide into N" at a glance
+  // without repeating a number on every ring.
+  if (depth === 0) {
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('x', TP_PREVIEW_CENTER);
+    label.setAttribute('y', TP_PREVIEW_CENTER + 4);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('font-family', 'var(--mono)');
+    label.setAttribute('font-size', '11');
+    label.setAttribute('fill', 'var(--text-dim)');
+    label.textContent = node.division;
+    svg.appendChild(label);
+  }
+}
+
+// Applies whatever the popover's fields currently say, in place, without
+// closing the popover — this is what makes every field (division, pattern
+// algorithm, its params, mode/rotation, complement/reverse/pseudo) update
+// the visualizer and audio live as they're changed, instead of waiting for
+// an explicit "Apply". Safe to call repeatedly (every keystroke/change).
+function applyTupletEditorLive() {
+  if (!tupletEditorTarget) return;
+  const division = Math.max(2, intOr(getEl('tupletDivisionInput').value, 3));
+  const genConfig = readTupletGenConfig();
+  if (!validateTupletGenConfig(genConfig, division)) return;
+
+  if (tupletEditorTarget.mode === 'create-root') {
+    let span = spanById(tupletEditorTarget.id);
+    if (!span) {
+      span = new TupletSpan(tupletEditorTarget.startStep, tupletEditorTarget.endStep, division, genConfig);
+      tupletEditorTarget.id = span.id;
+      tupletEditorTarget.created = true;
+      state.tuplets.push(span);
+    } else {
+      const kept = span.root.children;
+      span.root = new Tuplet(division, genConfig);
+      for (let i = 0; i < Math.min(kept.length, division); i++) span.root.children[i] = kept[i];
+    }
+    span.overrideBase = getEl('tupletOverrideToggle').checked;
+  } else if (tupletEditorTarget.mode === 'create-nested') {
+    const span = spanById(tupletEditorTarget.spanId);
+    const parent = resolveNodeAtPath(span, tupletEditorTarget.parentPath);
+    if (span && parent) {
+      const existingChild = parent.children[tupletEditorTarget.slot];
+      if (existingChild && tupletEditorTarget.created) {
+        const kept = existingChild.children;
+        const fresh = new Tuplet(division, genConfig);
+        for (let i = 0; i < Math.min(kept.length, division); i++) fresh.children[i] = kept[i];
+        parent.children[tupletEditorTarget.slot] = fresh;
+      } else {
+        parent.children[tupletEditorTarget.slot] = new Tuplet(division, genConfig);
+        tupletEditorTarget.created = true;
+      }
+    }
+  } else if (tupletEditorTarget.mode === 'edit') {
+    const span = spanById(tupletEditorTarget.spanId);
+    if (span) {
+      if (tupletEditorTarget.path.length === 0) {
+        const kept = span.root.children;
+        span.root = new Tuplet(division, genConfig);
+        // preserve nested children where the slot index is still in range
+        for (let i = 0; i < Math.min(kept.length, division); i++) span.root.children[i] = kept[i];
+        span.overrideBase = getEl('tupletOverrideToggle').checked;
+      } else {
+        const parentRef = resolveParent(span, tupletEditorTarget.path);
+        if (parentRef) {
+          const oldChild = parentRef.node.children[parentRef.slot];
+          const fresh = new Tuplet(division, genConfig);
+          if (oldChild) {
+            for (let i = 0; i < Math.min(oldChild.children.length, division); i++) fresh.children[i] = oldChild.children[i];
+          }
+          parentRef.node.children[parentRef.slot] = fresh;
+        }
+      }
+    }
+  }
+
+  updateTupletModeUI();
+  drawCircle();
+  renderTupletPreview();
+  if (genConfig && genConfig.algo === 'grid') renderTupletStageList();
+  reclampPopover();
+  scheduleIfPlaying();
+}
+
+// "Done" — the field edits are already live, so this just closes the
+// popover (after one last apply, in case a debounced keystroke hasn't
+// landed yet).
+function confirmTupletEditor() {
+  if (!tupletEditorTarget) return;
+  applyTupletEditorLive();
+  closeTupletPopover();
+  updateTupletModeUI();
+  drawCircle();
+}
+
+
+// Reverts whatever this popover session changed, then closes it. For an
+// existing tuplet that means restoring the pre-edit snapshot; for a
+// not-yet-existing one it means removing whatever the live preview created.
+function cancelTupletEditor() {
+  if (!tupletEditorTarget) { closeTupletPopover(); drawCircle(); return; }
+
+  if (tupletEditorTarget.mode === 'edit' && tupletEditorTarget.snapshot) {
+    const idx = state.tuplets.findIndex(sp => sp.id === tupletEditorTarget.spanId);
+    if (idx !== -1) state.tuplets[idx] = tupletEditorTarget.snapshot;
+  } else if (tupletEditorTarget.mode === 'create-root' && tupletEditorTarget.created) {
+    state.tuplets = state.tuplets.filter(sp => sp.id !== tupletEditorTarget.id);
+  } else if (tupletEditorTarget.mode === 'create-nested' && tupletEditorTarget.created) {
+    const span = spanById(tupletEditorTarget.spanId);
+    const parent = span && resolveNodeAtPath(span, tupletEditorTarget.parentPath);
+    if (parent) parent.children[tupletEditorTarget.slot] = null;
+  }
+
+  closeTupletPopover();
+  updateTupletModeUI();
+  drawCircle();
+  scheduleIfPlaying();
+}
+
+function deleteTupletEditor() {
+  if (!tupletEditorTarget || tupletEditorTarget.mode !== 'edit') return;
+  const span = spanById(tupletEditorTarget.spanId);
+  if (!span) { closeTupletPopover(); return; }
+
+  if (tupletEditorTarget.path.length === 0) {
+    state.tuplets = state.tuplets.filter(sp => sp.id !== span.id);
+  } else {
+    const parentRef = resolveParent(span, tupletEditorTarget.path);
+    if (parentRef) parentRef.node.children[parentRef.slot] = null;
+  }
+
+  closeTupletPopover();
+  updateTupletModeUI();
+  drawCircle();
+  scheduleIfPlaying();
 }
 
 function fireStep(index) {
   const n = state.n;
+  state.lastPlayheadFrac = index;
   // Move playhead line
   const line = getEl('playheadLine') || document.getElementById('playheadLine');
   if (line) {
@@ -1393,6 +2949,7 @@ function fireStep(index) {
     activeDot.setAttribute('r', DOT_R_REST + 2);
     activeDot.setAttribute('fill', 'var(--text-dim)');
   }
+  if (getEl('tupletPopover').classList.contains('visible')) renderTupletPreview();
 }
 
 /* =========================================================================
@@ -1402,12 +2959,77 @@ function fireStep(index) {
 /* A single persistent clock drives playback. Each tick reads state.pattern /
    state.n / state.weights fresh, so editing parameters, switching algorithms,
    or selecting a grid stage never stops or restarts the clock — the only
-   thing that can change mid-stream is what the *next* ticks play. */
+   thing that can change mid-stream is what the *next* ticks play.
+
+   Tuplets break the assumption that every event sits on the fixed 16th-
+   note grid, so playback branches into two modes:
+     - No tuplets: identical to the original behaviour — a plain
+       setInterval fires once per base step.
+     - Tuplets present: a merged, sorted list of fractional onset
+       positions (base-grid steps outside any tuplet span, plus each
+       tuplet's own proportional onsets inside it) is built for the whole
+       cycle and played by a lookahead scheduler, so off-grid tuplet
+       onsets land at their correct proportional time instead of being
+       snapped to the nearest 16th note. */
 
 function currentStepDurationSec() {
   const bpm = floatOr(getEl('bpmInput').value, 120);
   return 60 / (4 * bpm); // 16th-note grid, matches source files
 }
+
+function cycleDurationSec() {
+  return currentStepDurationSec() * state.n;
+}
+
+// Builds the flat, time-ordered list of events for one full cycle when
+// tuplets are in play. Each event: { frac, isOnset } where frac is the
+// position in [0, n) measured in base-step units (so 3.5 = halfway
+// through step 3), matching the same units drawCircle already uses.
+//
+// Tuplets coexist with the underlying pattern rather than replacing it:
+// a base step's own onset still plays at its original instant even when
+// that step falls inside a tuplet's span, alongside whatever the
+// tuplet's own generator produces. The only thing merged away is an
+// exact-instant collision (a tuplet onset landing precisely on an
+// integer base-step position that's also a base onset), so one downbeat
+// doesn't fire two clicks at once.
+function buildTupletTimeline() {
+  const n = state.n;
+  const events = [];
+  const seenFracs = new Set();
+  const addEvent = (frac) => {
+    // Snap to a stable key so float noise (e.g. 3.0000000002) doesn't
+    // defeat the same-instant dedupe.
+    const key = Math.round(frac * 1e6) / 1e6;
+    if (seenFracs.has(key)) return;
+    seenFracs.add(key);
+    events.push({ frac, isOnset: true });
+  };
+
+  state.tuplets.forEach(span => {
+    span.onsetStepPositions(n).forEach(pos => addEvent(pos));
+  });
+
+  for (let i = 0; i < n; i++) {
+    if (state.pattern[i] > 0 && !isStepOverriddenByTuplet(i, n)) addEvent(i);
+  }
+
+  events.sort((a, b) => a.frac - b.frac);
+  return events;
+}
+
+// True if some tuplet span with overrideBase enabled covers this base
+// step — used to silence the base pattern's own onset there so only the
+// tuplet's rhythm plays/draws across its span instead of both layers
+// sounding at once.
+function isStepOverriddenByTuplet(step, n) {
+  return state.tuplets.some(span => span.overrideBase && span.containsStep(step, n));
+}
+
+
+function hasTuplets() { return state.tuplets.length > 0; }
+
+/* ---- Fixed-grid path (unchanged from the original implementation) ---- */
 
 function tick() {
   const n = state.n;
@@ -1424,9 +3046,255 @@ function tick() {
   state.currentStep = (i + 1) % n;
 }
 
+/* ---- Tuplet-aware path: lookahead scheduler over fractional events ---- */
+
+const TUPLET_LOOKAHEAD_SEC = 0.12;
+const TUPLET_SCHEDULER_INTERVAL_MS = 25;
+
+function tupletScheduleTick() {
+  const ctx = state.audioCtx;
+  const cycleSec = cycleDurationSec();
+  const n = state.n;
+  const freq = floatOr(getEl('freqInput').value, 440);
+
+  // The lookahead window is small (120ms), so timeouts scheduled a couple
+  // of ticks ago have already fired — safe to drop them here rather than
+  // letting state.timeouts grow for the whole length of a playback session.
+  if (state.timeouts.length > 64) state.timeouts = state.timeouts.slice(-32);
+
+  while (state.nextEventTime < ctx.currentTime + TUPLET_LOOKAHEAD_SEC) {
+    const events = state.timeline;
+    if (events.length === 0) { state.nextEventTime += cycleSec; break; }
+    const ev = events[state.timelineIdx % events.length];
+    const when = state.nextEventTime;
+    playClick(when, freq, 0.85);
+
+    const visDelayMs = Math.max(0, (when - ctx.currentTime) * 1000);
+    const frac = ev.frac;
+    const t = setTimeout(() => fireFractionalStep(frac), visDelayMs);
+    state.timeouts.push(t);
+
+    state.timelineIdx++;
+    const nextEv = events[state.timelineIdx % events.length];
+    const wrapped = state.timelineIdx % events.length === 0;
+    const curFrac = ev.frac;
+    const nextFrac = wrapped ? nextEv.frac + n : nextEv.frac;
+    const deltaSteps = nextFrac - curFrac;
+    state.nextEventTime += deltaSteps * currentStepDurationSec();
+  }
+}
+
+function fireFractionalStep(frac) {
+  const n = state.n;
+  state.lastPlayheadFrac = modulo(frac, n);
+  const line = document.getElementById('playheadLine');
+  const cycleFrac = modulo(frac / n, 1);
+  const p = fracToXY(cycleFrac, R_DOTS);
+  if (line) {
+    line.setAttribute('x2', p.x);
+    line.setAttribute('y2', p.y);
+    line.setAttribute('opacity', '0.9');
+  }
+  // Reset base dots, pulse the nearest one so on-grid onsets still read
+  // clearly. Uses the same override-aware effective on/off state as
+  // drawCircle, so a step silenced by an overrideBase tuplet stays
+  // rest-styled through playback instead of flashing back to its raw
+  // pattern value on every tick.
+  for (let i = 0; i < n; i++) {
+    const dot = document.getElementById('dot-' + i);
+    if (!dot) continue;
+    const isOn = state.pattern[i] > 0 && !isStepOverriddenByTuplet(i, n);
+    dot.setAttribute('r', isOn ? restingOnsetRadius(i) : DOT_R_REST);
+    dot.setAttribute('fill', isOn ? 'var(--blue)' : 'var(--border-strong)');
+  }
+  const nearest = Math.round(frac) % n;
+  if (Math.abs(frac - nearest) < 0.01 && state.pattern[nearest] > 0 && !isStepOverriddenByTuplet(nearest, n)) {
+    const dot = document.getElementById('dot-' + nearest);
+    if (dot) { dot.setAttribute('r', restingOnsetRadius(nearest) + 5); dot.setAttribute('fill', 'var(--orange)'); }
+  }
+
+  // Reset every tuplet onset dot to its resting look, then pulse whichever
+  // one(s) sit at this fired fraction — the same fire-on-the-arc behaviour
+  // as the base ring, just at each dot's own radius instead of R_DOTS, so
+  // off-grid tuplet onsets read as clearly as on-grid ones. Usually only
+  // one dot matches, but a tuplet onset can coincidentally land on the
+  // same instant as a coexisting base onset, in which case both pulse.
+  //
+  // dot.dataset.frac is stored in absolute base-step units (same units as
+  // `frac` / onsetStepPositions(), i.e. in [0, n)) — NOT the [0,1)-normalized
+  // cycleFrac used for the playhead line above. Comparing against cycleFrac
+  // compared mismatched scales (off by a factor of n), so tuplet dots
+  // almost never actually matched the fired event. Compare in the same
+  // absolute units instead, wrapping around the base-step cycle length n.
+  const fracAbs = modulo(frac, n);
+  const tol = 0.5 / 32; // half a step at the finest division tuplets support, in absolute base-step units
+  document.querySelectorAll('.tuplet-onset-dot').forEach(dot => {
+    const df = parseFloat(dot.dataset.frac);
+    dot.setAttribute('r', dot.dataset.restR);
+    dot.setAttribute('fill', dot.dataset.restFill);
+    let delta = Math.abs(df - fracAbs);
+    delta = Math.min(delta, Math.abs(delta - n)); // wrap around 0/n
+    if (delta < tol) {
+      const restR = parseFloat(dot.dataset.restR);
+      dot.setAttribute('r', restR + 3.5);
+      dot.setAttribute('fill', 'var(--orange)');
+    }
+  });
+  if (getEl('tupletPopover').classList.contains('visible')) renderTupletPreview();
+}
+
+/* ---- Shared scheduling entry points ---- */
+
 function scheduleClock() {
-  if (state.visInterval) clearInterval(state.visInterval);
-  state.visInterval = setInterval(tick, currentStepDurationSec() * 1000);
+  clearTimers();
+  if (hasTuplets()) {
+    state.timeline = buildTupletTimeline();
+    state.timelineIdx = 0;
+    state.nextEventTime = state.audioCtx.currentTime + 0.03;
+    state.visInterval = setInterval(tupletScheduleTick, TUPLET_SCHEDULER_INTERVAL_MS);
+    state.tupletSchedulerActive = true;
+  } else {
+    state.visInterval = setInterval(tick, currentStepDurationSec() * 1000);
+    state.tupletSchedulerActive = false;
+  }
+}
+
+// Rebuilds the schedule in place (used when tuplets are added/edited/
+// removed mid-playback, including live edits from the popover) without
+// resetting the playhead back to step 0 or otherwise disturbing the
+// timing already in flight — only the *content* of upcoming events
+// changes, not the underlying beat.
+function scheduleIfPlaying() {
+  if (!state.playing) return;
+  if (hasTuplets()) {
+    const cycleSec = cycleDurationSec();
+    const stepSec = currentStepDurationSec();
+    let elapsedFrac;
+    // True only on the one-time transition into tuplet playback (see
+    // below) — kept outside the if/else so the event-selection code can
+    // tell which case it's in without re-deriving it.
+    let enteringTupletMode = false;
+    // The frac the *old* timeline's pointer was already sitting on, right
+    // before this edit — this, not the live audio-clock phase, is the
+    // correct anchor for finding "the same place" in a freshly rebuilt
+    // timeline. See the long comment below for why.
+    let anchorFrac = null;
+
+    // The very first tuplet created while already playing (or the last
+    // one removed and re-added) flips hasTuplets() from false→true, but
+    // state.visInterval is still the plain-grid tick() interval — that
+    // path only ever maintains the integer state.currentStep on its own
+    // fixed setInterval cadence, it never touches state.nextEventTime.
+    // So on this one-time transition, derive the current phase from
+    // currentStep instead (nextEventTime is stale/meaningless here), and
+    // swap the interval itself to tupletScheduleTick — without going
+    // through scheduleClock(), which would reset nextEventTime to "start
+    // of cycle" and snap the playhead back to onset 0.
+    if (!state.tupletSchedulerActive) {
+      clearTimers();
+      elapsedFrac = state.currentStep;
+      state.visInterval = setInterval(tupletScheduleTick, TUPLET_SCHEDULER_INTERVAL_MS);
+      state.tupletSchedulerActive = true;
+      enteringTupletMode = true;
+    } else {
+      // Already running the tuplet scheduler. state.timeline / timelineIdx
+      // still reflect the *old* pattern, and nextEventTime is the real,
+      // already-scheduled audio-clock time for whatever event that index
+      // points at — so read the anchor frac off that old event directly,
+      // before it gets overwritten below. This is deliberately NOT the
+      // live playhead phase: the live phase (audio-clock time converted
+      // back to a step position) is a fine number on its own, but it's
+      // measuring "how far around the 16-step circle are we", while the
+      // timeline's fracs for a short tuplet only ever range over the
+      // tuplet's own span (e.g. 0-4 out of 16). Once the live phase has
+      // moved past the end of that span — which is true for most of the
+      // cycle, any time a tuplet occupies less than the full circle —
+      // comparing it against the new timeline's fracs finds nothing and
+      // forces a wrap to index 0 on almost every edit, which is exactly
+      // what sounded like "the tuplet plays again" on every division
+      // change. Anchoring on the old event's own frac instead keeps the
+      // comparison in the same frame the timeline itself uses, so a small
+      // edit only ever nudges the index by a small amount.
+      anchorFrac = state.timeline[state.timelineIdx % state.timeline.length].frac;
+    }
+
+    state.timeline = buildTupletTimeline();
+    if (state.timeline.length === 0) {
+      state.timelineIdx = 0;
+      // No events at all — next possible event is a full cycle out from
+      // the phase we're already at; keeps the clock anchored even though
+      // nothing will actually play until events exist again. This is the
+      // one case that still needs the live audio-clock phase, since
+      // there's no old event left to anchor on.
+      if (elapsedFrac === undefined) {
+        const secUntilNext = state.nextEventTime - state.audioCtx.currentTime;
+        const elapsedSec = modulo(-secUntilNext, cycleSec);
+        elapsedFrac = modulo(elapsedSec / stepSec, state.n);
+      }
+      state.nextEventTime = state.audioCtx.currentTime + (cycleSec - modulo(elapsedFrac * stepSec, cycleSec));
+    } else if (enteringTupletMode) {
+      // No pre-existing tuplet-scheduled time to inherit here (this is
+      // the first tick of the tuplet scheduler), so this one case does
+      // still need an absolute time computed from the live phase.
+      let idx = state.timeline.findIndex(ev => ev.frac >= elapsedFrac);
+      let wrapped = false;
+      if (idx === -1) { idx = 0; wrapped = true; }
+      state.timelineIdx = idx;
+      const targetFrac = wrapped ? state.timeline[idx].frac + state.n : state.timeline[idx].frac;
+      const deltaSteps = targetFrac - elapsedFrac;
+      state.nextEventTime = state.audioCtx.currentTime + deltaSteps * stepSec;
+    } else {
+      // Steady-state edit: find the closest event in the *new* timeline
+      // at or after anchorFrac (the old event's own frac), and leave
+      // nextEventTime untouched — reusing the time that was already
+      // scheduled and only retargeting *which* event fires there means
+      // an edit changes what plays, not when, so the circle keeps
+      // turning through whatever's left of the current lap instead of
+      // snapping ahead to the tuplet's own start.
+      let idx = state.timeline.findIndex(ev => ev.frac >= anchorFrac);
+      if (idx === -1) idx = 0;
+      state.timelineIdx = idx;
+    }
+
+
+    // A handful of *visual* fireFractionalStep timeouts may already be
+    // queued (up to TUPLET_LOOKAHEAD_SEC ahead) referencing the old
+    // timeline's fractions — left alone, one of those firing after this
+    // edit would snap the playhead/dots to a stale, no-longer-correct
+    // position for a moment, reading as a stutter or restart. The clicks
+    // that were already committed to the Web Audio graph for that same
+    // window can't be un-scheduled without an audible pop, so those are
+    // left to finish naturally (at most ~120ms of old-content tail);
+    // tupletScheduleTick's own interval keeps running and immediately
+    // resumes filling the lookahead window from the new timeline.
+    state.timeouts.forEach(id => clearTimeout(id));
+    state.timeouts = [];
+    // keep audio timing continuous; only the *content* of upcoming events changes
+  } else if (state.tupletSchedulerActive) {
+    // Mirror image of the transition handled above: the last tuplet was
+    // just removed/edited away, so we're dropping from the fractional
+    // tuplet scheduler back onto the plain fixed-step grid. Naively
+    // calling scheduleClock() here would start a fresh tick() interval
+    // with state.currentStep left wherever it last was (usually still 0,
+    // since the tuplet scheduler never touches it) — that's what was
+    // causing playback to snap back to onset 0 whenever a tuplet's last
+    // edit made it stop existing (e.g. deleting it, or cancelling its
+    // creation) while playing. Derive the current phase from the audio
+    // clock instead, same as the tuplet path does, and seed
+    // state.currentStep from it so tick() picks up mid-stream.
+    const cycleSec = cycleDurationSec();
+    const stepSec = currentStepDurationSec();
+    const secUntilNext = state.nextEventTime - state.audioCtx.currentTime;
+    const elapsedSec = modulo(-secUntilNext, cycleSec);
+    const elapsedFrac = modulo(elapsedSec / stepSec, state.n);
+
+    clearTimers();
+    state.currentStep = Math.round(elapsedFrac) % state.n;
+    state.visInterval = setInterval(tick, stepSec * 1000);
+    state.tupletSchedulerActive = false;
+  } else {
+    scheduleClock();
+  }
 }
 
 function startPlayback() {
@@ -1434,7 +3302,9 @@ function startPlayback() {
   state.playing = true;
   state.currentStep = 0;
   scheduleClock();
-  tick(); // play/visualize step 0 immediately instead of waiting one interval
+  if (!hasTuplets()) {
+    tick(); // play/visualize step 0 immediately instead of waiting one interval
+  }
 
   const btn = getEl('playBtn');
   btn.textContent = 'Stop';
@@ -1453,6 +3323,10 @@ function stopPlayback() {
     dot.setAttribute('r', isOn ? restingOnsetRadius(i) : DOT_R_REST);
     dot.setAttribute('fill', isOn ? 'var(--blue)' : 'var(--border-strong)');
   }
+  document.querySelectorAll('.tuplet-onset-dot').forEach(dot => {
+    dot.setAttribute('r', dot.dataset.restR);
+    dot.setAttribute('fill', dot.dataset.restFill);
+  });
   const btn = getEl('playBtn');
   btn.textContent = 'Play';
   btn.classList.remove('playing');
@@ -1462,6 +3336,7 @@ function clearTimers() {
   state.timeouts.forEach(id => clearTimeout(id));
   state.timeouts = [];
   if (state.visInterval) { clearInterval(state.visInterval); state.visInterval = null; }
+  state.tupletSchedulerActive = false;
 }
 
 function togglePlayback() {
@@ -1551,6 +3426,69 @@ window.addEventListener('keydown', (e) => {
     togglePlayback();
   }
 });
+
+/* ---------------------------- Tuplet UI wiring ---------------------------- */
+
+getEl('tupletModeBtn').addEventListener('click', toggleTupletMode);
+getEl('tupletClearBtn').addEventListener('click', clearTuplets);
+getEl('tupletConfirmBtn').addEventListener('click', confirmTupletEditor);
+getEl('tupletDeleteBtn').addEventListener('click', deleteTupletEditor);
+getEl('tupletCancelBtn').addEventListener('click', cancelTupletEditor);
+
+// Debounced live-apply for keystroke-driven fields (the division input,
+// and any dynamically-rendered param inputs of type number/text), mirroring
+// the same debounce used for the main panel: apply on every keystroke, but
+// coalesced so a scheduled tick can't land mid-edit on a half-typed value.
+const debouncedTupletApply = debounce(applyTupletEditorLive, 180);
+
+getEl('tupletDivisionInput').addEventListener('input', debouncedTupletApply);
+getEl('tupletDivisionInput').addEventListener('change', applyTupletEditorLive);
+getEl('tupletDivisionInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); confirmTupletEditor(); }
+  else if (e.key === 'Escape') { e.preventDefault(); cancelTupletEditor(); }
+});
+
+getEl('tupletAlgoSelect').addEventListener('change', () => {
+  getEl('tupletAlgoError').textContent = '';
+  renderTupletParamFields(null); // rebuilds + rewires the param fields for the new algorithm
+  reclampPopover();
+  applyTupletEditorLive();
+});
+
+getEl('tupletOverrideToggle').addEventListener('change', applyTupletEditorLive);
+
+// The param fields under #tupletAlgoParams (onsets/multiplier/rotation/
+// mode/grouping/complement/reverse/pseudo) are rebuilt from scratch every
+// time the algorithm changes or an editor opens, so their listeners are
+// (re)attached here rather than once at load time.
+function wireTupletParamFields() {
+  const container = getEl('tupletAlgoParams');
+  container.querySelectorAll('input[type=number], input[type=text]').forEach(inp => {
+    inp.addEventListener('input', debouncedTupletApply);
+    inp.addEventListener('change', applyTupletEditorLive);
+  });
+  container.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', applyTupletEditorLive);
+  });
+}
+
+// Escape anywhere in the popover cancels/reverts, same as on the division field.
+getEl('tupletPopover').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); cancelTupletEditor(); }
+});
+
+// Click anywhere outside the popover (and not on a tuplet label, which has
+// its own handler that would otherwise immediately re-close it) confirms
+// and closes it — edits are already live, so this behaves like "Done"
+// rather than discarding anything.
+document.addEventListener('click', (e) => {
+  const pop = getEl('tupletPopover');
+  if (!pop.classList.contains('visible')) return;
+  if (pop.contains(e.target)) return;
+  if (e.target.closest('[data-tuplet-label]')) return;
+  confirmTupletEditor();
+});
+updateTupletModeUI();
 
 /* ---------------------------- Tooltips ---------------------------- */
 (function initTooltips(){
