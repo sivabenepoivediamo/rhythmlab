@@ -1411,14 +1411,37 @@ class Tuplet {
   constructor(division, genConfig) {
     this.id = 'tp' + (tupletIdCounter++);
     this.division = Math.max(2, division | 0);
-    // children[slotIndex] = nested Tuplet subdividing that slot, if any
+    // children[slotIndex] = nested Tuplet subdividing that slot, if any.
+    // A nested child is stored at the *first* parent slot it covers.
     this.children = new Array(this.division).fill(null);
+    // childSpan[slotIndex] = how many consecutive parent slots (starting
+    // at slotIndex) the child stored there occupies. 1 for an ordinary
+    // single-slot nested tuplet (the original behavior); >1 when the user
+    // picked two non-adjacent boundary points on the same arc, so the
+    // nested tuplet swallows every slot in between into its own span
+    // instead of just one. Slots covered by someone else's multi-slot
+    // child (i.e. index i where some j < i has children[j] with
+    // childSpan[j] > i - j) are "shadow" slots: skipped for drawing,
+    // clicking, and onset generation, since they belong to that child's
+    // span rather than being independent slots of this node.
+    this.childSpan = new Array(this.division).fill(1);
     // Which generator fills this node's own slots, and its params. Default
     // (no config) is "every slot onsets" — the original behavior — so a
     // freshly-created tuplet still sounds exactly as before until the user
     // picks a generator.
     this.genConfig = genConfig || null;
     this.pattern = this.computePattern();
+  }
+
+  // True if slot i is a "shadow" slot — swallowed into a multi-slot child
+  // that starts at some earlier index j (j < i <= j + childSpan[j] - 1).
+  // Shadow slots contribute nothing of their own: no dot, no click target,
+  // no onset — the child at the group's start slot owns that whole stretch.
+  isShadowSlot(i) {
+    for (let j = 0; j < i; j++) {
+      if (this.children[j] && this.childSpan[j] > 1 && i < j + this.childSpan[j]) return true;
+    }
+    return false;
   }
 
   // Runs this node's own generator against its division, returning a
@@ -1446,8 +1469,10 @@ class Tuplet {
   onsetFractions() {
     const out = [];
     for (let i = 0; i < this.division; i++) {
+      if (this.isShadowSlot(i)) continue; // owned by an earlier multi-slot child
       const slotStart = i / this.division;
-      const slotWidth = 1 / this.division;
+      const span = this.childSpan[i] || 1;
+      const slotWidth = span / this.division;
       const child = this.children[i];
       if (child) {
         child.onsetFractions().forEach(f => out.push(slotStart + f * slotWidth));
@@ -1467,8 +1492,10 @@ class Tuplet {
     depth = depth || 0;
     const out = [];
     for (let i = 0; i < this.division; i++) {
+      if (this.isShadowSlot(i)) continue;
       const slotStart = i / this.division;
-      const slotWidth = 1 / this.division;
+      const span = this.childSpan[i] || 1;
+      const slotWidth = span / this.division;
       const child = this.children[i];
       if (child) {
         child.onsetFractionsWithDepth(depth + 1).forEach(e => out.push({ frac: slotStart + e.frac * slotWidth, depth: e.depth }));
@@ -1485,8 +1512,10 @@ class Tuplet {
     depth = depth || 0;
     const out = [];
     for (let i = 0; i < this.division; i++) {
+      if (this.isShadowSlot(i)) continue;
       const slotStart = i / this.division;
-      const slotWidth = 1 / this.division;
+      const span = this.childSpan[i] || 1;
+      const slotWidth = span / this.division;
       const child = this.children[i];
       if (child) {
         child.leafSlots(depth + 1).forEach(s => out.push({
@@ -1521,6 +1550,7 @@ class Tuplet {
     const copy = new Tuplet(this.division, this.genConfig ? { algo: this.genConfig.algo, params: { ...this.genConfig.params } } : null);
     copy.id = this.id;
     copy.children = this.children.map(c => c ? c.clone() : null);
+    copy.childSpan = this.childSpan.slice();
     return copy;
   }
 }
@@ -1590,6 +1620,29 @@ class TupletSpan {
       pos: modulo(this.startStep + swungFracs[i] * len, n),
       depth: e.depth,
     }));
+  }
+
+  // A lookup from this span's raw (unswung) local onset fraction to the
+  // absolute base-step-unit position it actually fires at once swing is
+  // applied — the same absolute units drawn/matched against in
+  // fireFractionalStep (dot.dataset.frac) and produced by
+  // buildTupletTimeline(). Swing is computed once across this span's whole
+  // flattened onset order (see onsetStepPositionsWithDepth above), so an
+  // individual nested dot can't work out its own swung firing time in
+  // isolation — this builds the map once per span so drawTupletNode can
+  // look each dot's swung position up by its raw fraction instead of
+  // (wrongly) storing the unswung slot fraction, which is what let a
+  // swung tuplet's dots fail to match against the actual firing events.
+  swungFracLookup(n) {
+    const len = this.lengthInSteps(n);
+    const rawFracs = this.root.onsetFractions();
+    const swungFracs = applySwingToFractions(rawFracs, 1, this.swing);
+    const map = new Map();
+    rawFracs.forEach((raw, i) => {
+      const key = Math.round(raw * 1e9) / 1e9;
+      map.set(key, modulo(this.startStep + swungFracs[i] * len, n));
+    });
+    return map;
   }
 
   // Deep clone, used to snapshot a span before a live edit begins (see
@@ -2146,11 +2199,20 @@ function drawTuplets(svg) {
     // inside this span were overlaid as small blue dots on the arc itself,
     // which mixed the two grids together on one line and made the arc's
     // own division harder to read.)
-    drawTupletNode(svg, span.root, fracStart, fracEnd, 0, { spanId: span.id, path: [] }, []);
+    const swungLookup = span.swungFracLookup(n);
+    drawTupletNode(svg, span.root, fracStart, fracEnd, 0, { spanId: span.id, path: [] }, 0, 1, swungLookup);
   });
 }
 
-function drawTupletNode(svg, node, fracStart, fracEnd, depth, addr) {
+// nodeRawFracStart/nodeRawFracWidth describe this node's own span in its
+// root span's [0,1) raw (unswung) onset-fraction space — the same units
+// onsetFractions()/swungFracLookup() use. The root itself starts at 0 with
+// width 1; a child inherits a slice of its parent's width the same way
+// fracStart/fracEnd slice the *visual* [0,1) circle fraction. Threading
+// this down (in parallel with the geometry) lets a leaf dot at any depth
+// compute its own raw fraction and look up its true post-swing firing
+// time in swungLookup.
+function drawTupletNode(svg, node, fracStart, fracEnd, depth, addr, nodeRawFracStart, nodeRawFracWidth, swungLookup) {
   const radius = R_TUPLET_BASE + depth * R_TUPLET_STEP;
   const width = fracEnd - fracStart;
   const d = describeArc(fracStart, fracEnd, radius);
@@ -2217,18 +2279,29 @@ function drawTupletNode(svg, node, fracStart, fracEnd, depth, addr) {
   // step dots (a dot at every slot, dim when it's a rest, bright when it
   // onsets) rather than drawing separate tick-mark lines for the
   // divisions. Nested-child slots don't get a dot here since the child
-  // draws its own dots one level out.
+  // draws its own dots one level out. Slots swallowed into an earlier
+  // multi-slot nested child (isShadowSlot) draw nothing at all — that
+  // stretch belongs entirely to the child's own arc one ring out.
+  //
+  // The very last boundary (i === node.division) is the same point in
+  // space as slot 0 of whatever sits beyond this node's span, so it never
+  // carries an onset/rest of its own — this node's pattern has no entry
+  // there. But it's still a real, distinct point on *this* arc/ring (a
+  // sibling node one level up draws its own dot at this radius only if it
+  // happens to sit at this exact angle, which isn't guaranteed — e.g. the
+  // last child in a parent's division has no sibling past it at this
+  // radius at all). So it still gets a (rest-styled, non-onsetting)
+  // dot and a clickable handle, just never an onset — otherwise this
+  // point would be visually missing and unusable as an anchor for
+  // starting another nested tuplet from this arc.
   for (let i = 0; i <= node.division; i++) {
     const slotFrac = fracStart + (i / node.division) * width;
-
-    // Skip the very last boundary (i === node.division): it's the same
-    // point as slot 0 of whatever sits beyond this node's span, and that
-    // neighboring node already draws a dot there.
-    const isBoundarySlot = i === node.division;
+    const isShadow = i < node.division && node.isShadowSlot(i);
+    const isEndBoundary = i === node.division;
     const hasNestedChild = i < node.division && node.children[i];
 
-    if (!isBoundarySlot && !hasNestedChild) {
-      const onsets = node.pattern[i] > 0;
+    if (!hasNestedChild && !isShadow) {
+      const onsets = !isEndBoundary && node.pattern[i] > 0;
       const dotPos = fracToXY(slotFrac, radius);
       // Sized up from the original 2.5/3 and 3.5/4.5 so they're easier to
       // land a click on, while staying visibly smaller than the main
@@ -2247,12 +2320,20 @@ function drawTupletNode(svg, node, fracStart, fracEnd, depth, addr) {
       if (onsets) {
         // fireFractionalStep compares this against absolute base-step-unit
         // fracs (same units as onsetStepPositions()/the scheduled timeline,
-        // i.e. in [0, state.n)) — NOT circle-fraction units like slotFrac
-        // above. Converting here (× state.n) is what makes every onset
-        // after the very first one (which happened to be 0 in both unit
-        // systems, masking this everywhere else) actually match and pulse
-        // when it fires.
-        onsetDot.dataset.frac = String(slotFrac * state.n);
+        // i.e. in [0, state.n)). nodeRawFracStart + this slot's own local
+        // offset gives this onset's raw (unswung) fraction within the
+        // *root* span's own [0,1) onset-fraction space — the same space
+        // onsetFractions()/swungFracLookup() work in — so looking that key
+        // up in swungLookup gives the actual post-swing absolute position
+        // it fires at, instead of the pre-swing slot position the old code
+        // stored here (which is what made a swung tuplet's dots stop
+        // matching the real firing events). Falls back to the unswung
+        // position if the lookup ever misses (e.g. floating point drift),
+        // so a dot never silently stops pulsing altogether.
+        const rawLocal = nodeRawFracStart + (i / node.division) * nodeRawFracWidth;
+        const key = Math.round(rawLocal * 1e9) / 1e9;
+        const swungAbs = swungLookup && swungLookup.has(key) ? swungLookup.get(key) : (slotFrac * state.n);
+        onsetDot.dataset.frac = String(swungAbs);
       }
       onsetDot.dataset.restR = String(restR);
       onsetDot.dataset.restFill = onsets ? onFill : restFill;
@@ -2260,9 +2341,14 @@ function drawTupletNode(svg, node, fracStart, fracEnd, depth, addr) {
       svg.appendChild(onsetDot);
     }
 
-    // Clickable boundary point (skip the very last one, which is the same
-    // point as slot 0 of whatever sits beyond this node's span)
-    if (i < node.division && state.tupletMode) {
+    // Clickable boundary point — skip shadow slots (they have no boundary
+    // of their own to click while tuplet mode is armed against this node,
+    // since they're inside an existing multi-slot child's span instead of
+    // between two of this node's own children). The end boundary IS
+    // clickable: it's a legitimate handle for arming/completing a nested
+    // tuplet selection on this same arc, even though it never carries an
+    // onset of its own.
+    if (!isShadow && !hasNestedChild && state.tupletMode) {
       const hitPos = fracToXY(slotFrac, radius);
       const hit = document.createElementNS(SVG_NS, 'circle');
       hit.setAttribute('cx', hitPos.x);
@@ -2287,13 +2373,20 @@ function drawTupletNode(svg, node, fracStart, fracEnd, depth, addr) {
 
     // Recurse into any nested child at slot i, drawing its own division
     // the same way (arcs never show anything but their own subdivision).
+    // The child's fractional span now covers childSpan[i] parent slots
+    // (1 for an ordinary single-slot nest, more when the two boundary
+    // points that created it weren't adjacent), so its own arc visually
+    // stretches across exactly the slots it swallowed.
     if (i < node.division && node.children[i]) {
+      const slotSpan = node.childSpan[i] || 1;
       const childFracStart = fracStart + (i / node.division) * width;
-      const childFracEnd = fracStart + ((i + 1) / node.division) * width;
+      const childFracEnd = fracStart + ((i + slotSpan) / node.division) * width;
+      const childRawFracStart = nodeRawFracStart + (i / node.division) * nodeRawFracWidth;
+      const childRawFracWidth = (slotSpan / node.division) * nodeRawFracWidth;
       drawTupletNode(svg, node.children[i], childFracStart, childFracEnd, depth + 1, {
         spanId: addr.spanId,
         path: addr.path.concat(i),
-      });
+      }, childRawFracStart, childRawFracWidth, swungLookup);
     }
   }
 }
@@ -2339,7 +2432,7 @@ function updateTupletModeUI() {
   btn.textContent = state.tupletMode ? 'Click two points…' : 'Add tuplet';
   getEl('tupletClearBtn').disabled = state.tuplets.length === 0;
   if (!state.tupletMode) setTupletHint('');
-  else if (!state.tupletArm) setTupletHint('Click a step to start a tuplet span.');
+  else if (!state.tupletArm) setTupletHint('Click a step or an existing arc\u2019s boundary point to start a tuplet span.');
 }
 
 function toggleTupletMode() {
@@ -2382,9 +2475,12 @@ function onBaseStepClick(step) {
   }
 
   if (state.tupletArm.kind !== 'base') {
-    // switched targets mid-selection — restart cleanly on the base grid
+    // switched targets mid-selection (was armed on a tuplet arc) — a
+    // tuplet's two boundary points must both belong to the same ring, so
+    // restart cleanly on the base grid instead of silently combining
+    // points from two different rings.
     state.tupletArm = { kind: 'base', step };
-    setTupletHint('Now click a second step to complete the span.');
+    setTupletHint('Selection must stay on one ring — restarted here. Now click a second step to complete the span.');
     drawCircle();
     return;
   }
@@ -2430,16 +2526,19 @@ function onBaseStepClick(step) {
 }
 
 // Click on an existing tuplet's slot boundary. First click arms it; a
-// second click on the *next* boundary over (same parent node) subdivides
-// that one slot into a nested tuplet — or, if that slot is already
-// nested, opens its editor instead of overwriting it. A nested tuplet's
-// ratio label also opens the same editor directly.
+// second click on *any other* boundary point of that same node's arc
+// (not just the adjacent one) subdivides the slots between them into a
+// single nested tuplet spanning that whole stretch — or, if the range is
+// exactly one existing nested child's own slot, opens its editor instead
+// of overwriting it. A nested tuplet's ratio label also opens the same
+// editor directly.
 function onNodeSlotClick(addr, slot) {
   if (!state.tupletMode) return;
   const span = spanById(addr.spanId);
   if (!span) return;
   const node = resolveNodeAtPath(span, addr.path);
   if (!node) return;
+  if (node.isShadowSlot(slot)) return; // shouldn't be clickable, but guard anyway
 
   if (state.tupletArm && state.tupletArm.kind === 'node'
       && state.tupletArm.spanId === addr.spanId
@@ -2450,36 +2549,66 @@ function onNodeSlotClick(addr, slot) {
       drawCircle();
       return;
     }
-    // A nested tuplet subdivides exactly one slot of its parent (that's
-    // the model's leaf unit) — so the two clicks must bound a single slot,
-    // i.e. land on adjacent boundaries. Anything wider doesn't have a
-    // lossless representation, so it's rejected rather than silently
-    // dropping the slots in between.
+    // Any two distinct boundary points on this node's own arc are valid —
+    // they don't need to be adjacent. The slots strictly between them are
+    // absorbed into the new nested tuplet's span, exactly the same way a
+    // root tuplet absorbs the base steps between its own two boundary
+    // clicks. If that exact range already holds a single nested child
+    // (a lone previous nest with no other boundary in between), reopen its
+    // editor instead of silently overwriting it.
     const a = Math.min(state.tupletArm.slot, slot);
     const b = Math.max(state.tupletArm.slot, slot);
     state.tupletArm = null;
-    if (b - a !== 1) {
-      setTupletHint('Nesting subdivides one slot at a time — click two adjacent boundary points.');
-      drawCircle();
-      return;
+
+    // Reject a range that would swallow a slot boundary that's already the
+    // start of some *other* nested child, or that lands inside one (partial
+    // overlap) — same "don't silently eat an existing nested tuplet's
+    // sibling" guard the root-level overlap check performs.
+    for (let s = a; s < b; s++) {
+      if (node.isShadowSlot(s)) {
+        setTupletHint('That range overlaps an existing nested tuplet — pick a clear range, or edit/delete it first.');
+        drawCircle();
+        return;
+      }
     }
-    state.pendingNested = { spanId: addr.spanId, parentPath: addr.path, slot: a };
-    // If that slot already holds a nested tuplet, edit it instead of
-    // silently overwriting it with a fresh one.
-    if (node.children[a]) {
-      state.pendingNested = null;
+    // If the whole range is exactly one existing nested child's own span,
+    // edit it rather than replace it.
+    if (node.children[a] && (node.childSpan[a] || 1) === (b - a)) {
       openTupletEditor({ spanId: addr.spanId, path: addr.path.concat(a) }, null);
       return;
     }
+    // Otherwise, if slot a already holds a child but with a *different*
+    // span than the one just selected, or any slot in (a, b) holds a
+    // child, that's a real conflict — reject rather than clobber.
+    for (let s = a; s < b; s++) {
+      if (node.children[s]) {
+        setTupletHint('That range overlaps an existing nested tuplet — pick a clear range, or edit/delete it first.');
+        drawCircle();
+        return;
+      }
+    }
+
+    state.pendingNested = { spanId: addr.spanId, parentPath: addr.path, slot: a, slotSpan: b - a };
     // One-shot signal for the very next openTupletEditor call, same
     // reasoning as pendingSpan in onBaseStepClick — must not linger.
-    openTupletEditor(null, null, 1, true);
+    openTupletEditor(null, null, b - a, true);
     state.pendingNested = null;
     return;
   }
 
+  // Either nothing was armed yet, or something was armed on a different
+  // ring entirely (the base grid, or a different node's arc) — a tuplet's
+  // two boundary points must both belong to the *same* arc, so arming
+  // fresh here restarts selection cleanly instead of silently combining
+  // points from two different rings, mirroring the same restart
+  // onBaseStepClick does when armed elsewhere.
+  const switchedRings = state.tupletArm && !(state.tupletArm.kind === 'node'
+      && state.tupletArm.spanId === addr.spanId
+      && arraysEqual(state.tupletArm.path, addr.path));
   state.tupletArm = { kind: 'node', spanId: addr.spanId, path: addr.path, slot };
-  setTupletHint('Now click the next boundary point over to subdivide that slot.');
+  setTupletHint(switchedRings
+    ? 'Selection must stay on one arc — restarted here. Click another boundary point on this same arc.'
+    : 'Now click another boundary point on the same arc to nest that range.');
   drawCircle();
 }
 
@@ -2766,7 +2895,9 @@ function openTupletEditor(existingAddr, anchorXY, impliedSpan, isNested) {
     title.textContent = 'New nested tuplet';
     input.value = 3;
     deleteRow.style.display = 'none';
-    ratio.textContent = 'Subdivides one slot of the parent tuplet';
+    ratio.textContent = state.pendingNested.slotSpan > 1
+      ? `Subdivides ${state.pendingNested.slotSpan} slots of the parent tuplet`
+      : 'Subdivides one slot of the parent tuplet';
     algoSelect.value = 'fill';
     getEl('tupletOverrideRow').style.display = 'none';
     getEl('tupletSwingRow').style.display = 'none';
@@ -2924,8 +3055,9 @@ function renderTupletPreview() {
         let node = span.root;
         let ok = true;
         for (const slot of path) {
+          const slotSpan = node.childSpan[slot] || 1;
           const slotStart = slot / node.division;
-          const slotWidth = 1 / node.division;
+          const slotWidth = slotSpan / node.division;
           if (frac < slotStart - 1e-9 || frac >= slotStart + slotWidth + 1e-9) { ok = false; break; }
           frac = (frac - slotStart) / slotWidth;
           node = node.children[slot];
@@ -2985,8 +3117,11 @@ function drawPreviewRing(svg, node, depth, maxDepth, localPlayFrac) {
   svg.appendChild(ring);
 
   for (let i = 0; i < node.division; i++) {
+    if (node.isShadowSlot(i)) continue; // owned by an earlier multi-slot child; drawn as part of it below
+
+    const slotSpan = node.childSpan[i] || 1;
     const slotStart = i / node.division;
-    const slotEnd = (i + 1) / node.division;
+    const slotEnd = (i + slotSpan) / node.division;
     const child = node.children[i];
 
     // Tick at this slot's leading edge
@@ -3000,9 +3135,10 @@ function drawPreviewRing(svg, node, depth, maxDepth, localPlayFrac) {
     svg.appendChild(tick);
 
     if (child) {
-      // A nested child fills this whole slot — draw a short bracket arc
-      // across the slot at this depth to show it hands off to a child
-      // ring, then recurse.
+      // A nested child fills this slot range (one slot in the ordinary
+      // case, several when it swallowed non-adjacent boundary points) —
+      // draw a bracket arc across that whole range at this depth to show
+      // it hands off to a child ring, then recurse.
       const bracket = document.createElementNS(SVG_NS, 'path');
       bracket.setAttribute('d', previewDescribeArc(slotStart, slotEnd, radius));
       bracket.setAttribute('fill', 'none');
@@ -3070,8 +3206,12 @@ function applyTupletEditorLive() {
       state.tuplets.push(span);
     } else {
       const kept = span.root.children;
+      const keptSpan = span.root.childSpan;
       span.root = new Tuplet(division, genConfig);
-      for (let i = 0; i < Math.min(kept.length, division); i++) span.root.children[i] = kept[i];
+      for (let i = 0; i < Math.min(kept.length, division); i++) {
+        span.root.children[i] = kept[i];
+        span.root.childSpan[i] = keptSpan[i] || 1;
+      }
     }
     span.overrideBase = getEl('tupletOverrideToggle').checked;
     span.swing = intOr(getEl('tupletSwingSlider').value, 0);
@@ -3079,36 +3219,61 @@ function applyTupletEditorLive() {
     const span = spanById(tupletEditorTarget.spanId);
     const parent = resolveNodeAtPath(span, tupletEditorTarget.parentPath);
     if (span && parent) {
+      // slotSpan is how many consecutive parent slots (starting at
+      // tupletEditorTarget.slot) this new nested tuplet covers — 1 for the
+      // ordinary case, more when the two boundary points that created it
+      // weren't adjacent. Always (re)written here, not just on first
+      // creation, so a live division/param edit before confirming can't
+      // drift it back to 1.
+      const slotSpan = tupletEditorTarget.slotSpan || 1;
       const existingChild = parent.children[tupletEditorTarget.slot];
       if (existingChild && tupletEditorTarget.created) {
         const kept = existingChild.children;
+        const keptSpan = existingChild.childSpan;
         const fresh = new Tuplet(division, genConfig);
-        for (let i = 0; i < Math.min(kept.length, division); i++) fresh.children[i] = kept[i];
+        for (let i = 0; i < Math.min(kept.length, division); i++) {
+          fresh.children[i] = kept[i];
+          fresh.childSpan[i] = keptSpan[i] || 1;
+        }
         parent.children[tupletEditorTarget.slot] = fresh;
       } else {
         parent.children[tupletEditorTarget.slot] = new Tuplet(division, genConfig);
         tupletEditorTarget.created = true;
       }
+      parent.childSpan[tupletEditorTarget.slot] = slotSpan;
     }
   } else if (tupletEditorTarget.mode === 'edit') {
     const span = spanById(tupletEditorTarget.spanId);
     if (span) {
       if (tupletEditorTarget.path.length === 0) {
         const kept = span.root.children;
+        const keptSpan = span.root.childSpan;
         span.root = new Tuplet(division, genConfig);
-        // preserve nested children where the slot index is still in range
-        for (let i = 0; i < Math.min(kept.length, division); i++) span.root.children[i] = kept[i];
+        // preserve nested children (and their own slot spans) where the
+        // slot index is still in range
+        for (let i = 0; i < Math.min(kept.length, division); i++) {
+          span.root.children[i] = kept[i];
+          span.root.childSpan[i] = keptSpan[i] || 1;
+        }
         span.overrideBase = getEl('tupletOverrideToggle').checked;
         span.swing = intOr(getEl('tupletSwingSlider').value, 0);
       } else {
         const parentRef = resolveParent(span, tupletEditorTarget.path);
         if (parentRef) {
           const oldChild = parentRef.node.children[parentRef.slot];
+          const oldSpan = parentRef.node.childSpan[parentRef.slot] || 1;
           const fresh = new Tuplet(division, genConfig);
           if (oldChild) {
-            for (let i = 0; i < Math.min(oldChild.children.length, division); i++) fresh.children[i] = oldChild.children[i];
+            for (let i = 0; i < Math.min(oldChild.children.length, division); i++) {
+              fresh.children[i] = oldChild.children[i];
+              fresh.childSpan[i] = oldChild.childSpan[i] || 1;
+            }
           }
           parentRef.node.children[parentRef.slot] = fresh;
+          // The slot's own span in its parent (how many of the parent's
+          // slots this node itself swallows) is a property of the parent's
+          // bookkeeping, not this node — preserve it across the rebuild.
+          parentRef.node.childSpan[parentRef.slot] = oldSpan;
         }
       }
     }
@@ -3148,7 +3313,10 @@ function cancelTupletEditor() {
   } else if (tupletEditorTarget.mode === 'create-nested' && tupletEditorTarget.created) {
     const span = spanById(tupletEditorTarget.spanId);
     const parent = span && resolveNodeAtPath(span, tupletEditorTarget.parentPath);
-    if (parent) parent.children[tupletEditorTarget.slot] = null;
+    if (parent) {
+      parent.children[tupletEditorTarget.slot] = null;
+      parent.childSpan[tupletEditorTarget.slot] = 1;
+    }
   }
 
   closeTupletPopover();
@@ -3166,7 +3334,10 @@ function deleteTupletEditor() {
     state.tuplets = state.tuplets.filter(sp => sp.id !== span.id);
   } else {
     const parentRef = resolveParent(span, tupletEditorTarget.path);
-    if (parentRef) parentRef.node.children[parentRef.slot] = null;
+    if (parentRef) {
+      parentRef.node.children[parentRef.slot] = null;
+      parentRef.node.childSpan[parentRef.slot] = 1;
+    }
   }
 
   closeTupletPopover();
